@@ -1,7 +1,11 @@
+//go:build gen
 // +build gen
 
 //go:generate -command glow go run ../glow/
+//go:generate glow generate -out=./egl1.5/egl/ -api=egl -version=1.5 -xml=../glow/xml/ -tmpl=../glow/tmpl/
 //go:generate glow generate -out=./v2.1/gl/ -api=gl -version=2.1 -xml=../glow/xml/ -tmpl=../glow/tmpl/
+//go:generate glow generate -dispatch -out=./v2.1/fyne/ -api=gl -version=2.1 -remext=.* -restrict=./profiles/fyne-gl21.json -xml=../glow/xml/ -tmpl=../glow/tmpl/
+//go:generate glow generate -dispatch -out=./v2.1/material/ -api=gl -version=2.1 -restrict=./profiles/material-gl21.json -xml=../glow/xml/ -tmpl=../glow/tmpl/
 //go:generate glow generate -out=./all-core/gl/ -api=gl -version=all -profile=core -lenientInit -xml=../glow/xml/ -tmpl=../glow/tmpl/
 //go:generate glow generate -out=./v3.2-core/gl/ -api=gl -version=3.2 -profile=core -xml=../glow/xml/ -tmpl=../glow/tmpl/
 //go:generate glow generate -out=./v3.3-core/gl/ -api=gl -version=3.3 -profile=core -xml=../glow/xml/ -tmpl=../glow/tmpl/
@@ -19,6 +23,7 @@
 //go:generate glow generate -out=./v4.4-compatibility/gl/ -api=gl -version=4.4 -profile=compatibility -xml=../glow/xml/ -tmpl=../glow/tmpl/
 //go:generate glow generate -out=./v4.5-compatibility/gl/ -api=gl -version=4.5 -profile=compatibility -xml=../glow/xml/ -tmpl=../glow/tmpl/
 //go:generate glow generate -out=./v4.6-compatibility/gl/ -api=gl -version=4.6 -profile=compatibility -xml=../glow/xml/ -tmpl=../glow/tmpl/
+//go:generate glow generate -dispatch -out=./v2.0/gles2/ -api=gles2 -version=2.0 -remext=.* -xml=../glow/xml/ -tmpl=../glow/tmpl/
 //go:generate glow generate -out=./v3.0/gles2/ -api=gles2 -version=3.0 -xml=../glow/xml/ -tmpl=../glow/tmpl/
 //go:generate glow generate -out=./v3.1/gles2/ -api=gles2 -version=3.1 -xml=../glow/xml/ -tmpl=../glow/tmpl/
 //go:generate glow generate -out=./v3.2/gles2/ -api=gles2 -version=3.2 -xml=../glow/xml/ -tmpl=../glow/tmpl/

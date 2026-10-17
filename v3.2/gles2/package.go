@@ -22,6 +22,7 @@ package gles2
 // #cgo gles2,windows        LDFLAGS: -lGLESv2
 // #cgo !egl,linux !egl,freebsd !egl,netbsd !egl,openbsd pkg-config: gl
 // #cgo egl,linux egl,freebsd egl,netbsd egl,openbsd    pkg-config: egl
+// #include <stdint.h>
 // #if defined(_WIN32) && !defined(APIENTRY) && !defined(__CYGWIN__) && !defined(__SCITECH_SNAP__)
 // #ifndef WIN32_LEAN_AND_MEAN
 // #define WIN32_LEAN_AND_MEAN 1
@@ -1531,6 +1532,9 @@ package gles2
 // static void  glowDrawElementsInstanced(GPDRAWELEMENTSINSTANCED fnptr, GLenum  mode, GLsizei  count, GLenum  type, const void * indices, GLsizei  instancecount) {
 //   (*fnptr)(mode, count, type, indices, instancecount);
 // }
+// static void  glowDrawElementsInstancedWithOffset(GPDRAWELEMENTSINSTANCED fnptr, GLenum  mode, GLsizei  count, GLenum  type, uintptr_t offset, GLsizei  instancecount) {
+//   (*fnptr)(mode, count, type, (const void *)(offset), instancecount);
+// }
 // static void  glowDrawElementsInstancedANGLE(GPDRAWELEMENTSINSTANCEDANGLE fnptr, GLenum  mode, GLsizei  count, GLenum  type, const void * indices, GLsizei  primcount) {
 //   (*fnptr)(mode, count, type, indices, primcount);
 // }
@@ -3000,6 +3004,9 @@ package gles2
 // }
 // static void  glowReadPixels(GPREADPIXELS fnptr, GLint  x, GLint  y, GLsizei  width, GLsizei  height, GLenum  format, GLenum  type, void * pixels) {
 //   (*fnptr)(x, y, width, height, format, type, pixels);
+// }
+// static void  glowReadPixelsWithOffset(GPREADPIXELS fnptr, GLint  x, GLint  y, GLsizei  width, GLsizei  height, GLenum  format, GLenum  type, uintptr_t offset) {
+//   (*fnptr)(x, y, width, height, format, type, (void *)(offset));
 // }
 // static void  glowReadnPixels(GPREADNPIXELS fnptr, GLint  x, GLint  y, GLsizei  width, GLsizei  height, GLenum  format, GLenum  type, GLsizei  bufSize, void * data) {
 //   (*fnptr)(x, y, width, height, format, type, bufSize, data);
@@ -7847,6 +7854,9 @@ func DrawElementsIndirect(mode uint32, xtype uint32, indirect unsafe.Pointer) {
 func DrawElementsInstanced(mode uint32, count int32, xtype uint32, indices unsafe.Pointer, instancecount int32) {
 	C.glowDrawElementsInstanced(gpDrawElementsInstanced, (C.GLenum)(mode), (C.GLsizei)(count), (C.GLenum)(xtype), indices, (C.GLsizei)(instancecount))
 }
+func DrawElementsInstancedWithOffset(mode uint32, count int32, xtype uint32, offset uintptr, instancecount int32) {
+	C.glowDrawElementsInstancedWithOffset(gpDrawElementsInstanced, (C.GLenum)(mode), (C.GLsizei)(count), (C.GLenum)(xtype), (C.uintptr_t)(offset), (C.GLsizei)(instancecount))
+}
 func DrawElementsInstancedANGLE(mode uint32, count int32, xtype uint32, indices unsafe.Pointer, primcount int32) {
 	C.glowDrawElementsInstancedANGLE(gpDrawElementsInstancedANGLE, (C.GLenum)(mode), (C.GLsizei)(count), (C.GLenum)(xtype), indices, (C.GLsizei)(primcount))
 }
@@ -8631,11 +8641,11 @@ func GetShadingRateSampleLocationivNV(rate uint32, samples uint32, index uint32,
 // return a string describing the current GL connection
 func GetString(name uint32) *uint8 {
 	ret := C.glowGetString(gpGetString, (C.GLenum)(name))
-	return (*uint8)(ret)
+	return (*uint8)(unsafe.Pointer(ret))
 }
 func GetStringi(name uint32, index uint32) *uint8 {
 	ret := C.glowGetStringi(gpGetStringi, (C.GLenum)(name), (C.GLuint)(index))
-	return (*uint8)(ret)
+	return (*uint8)(unsafe.Pointer(ret))
 }
 
 // query the properties of a sync object
@@ -9671,6 +9681,9 @@ func ReadBufferNV(mode uint32) {
 func ReadPixels(x int32, y int32, width int32, height int32, format uint32, xtype uint32, pixels unsafe.Pointer) {
 	C.glowReadPixels(gpReadPixels, (C.GLint)(x), (C.GLint)(y), (C.GLsizei)(width), (C.GLsizei)(height), (C.GLenum)(format), (C.GLenum)(xtype), pixels)
 }
+func ReadPixelsWithOffset(x int32, y int32, width int32, height int32, format uint32, xtype uint32, offset uintptr) {
+	C.glowReadPixelsWithOffset(gpReadPixels, (C.GLint)(x), (C.GLint)(y), (C.GLsizei)(width), (C.GLsizei)(height), (C.GLenum)(format), (C.GLenum)(xtype), (C.uintptr_t)(offset))
+}
 
 // read a block of pixels from the frame buffer
 func ReadnPixels(x int32, y int32, width int32, height int32, format uint32, xtype uint32, bufSize int32, data unsafe.Pointer) {
@@ -10553,1994 +10566,9277 @@ func WindowRectanglesEXT(mode uint32, count int32, box *int32) {
 // For information about caveats of Init, you should read the "Platform Specific
 // Function Retrieval" section of https://www.opengl.org/wiki/Load_OpenGL_Functions.
 func Init() error {
-	return InitWithProcAddrFunc(getProcAddress)
+	return initWithProcAddrFunc(getProcAddress, true)
 }
 
-// InitWithProcAddrFunc intializes the package using the specified OpenGL
-// function pointer loading function. For more cases Init should be used
+// InitWithProcAddrFunc initializes the package using the specified OpenGL
+// function pointer loading function. For most cases Init should be used
 // instead.
 func InitWithProcAddrFunc(getProcAddr func(name string) unsafe.Pointer) error {
-	gpAcquireKeyedMutexWin32EXT = (C.GPACQUIREKEYEDMUTEXWIN32EXT)(getProcAddr("glAcquireKeyedMutexWin32EXT"))
-	gpActiveProgramEXT = (C.GPACTIVEPROGRAMEXT)(getProcAddr("glActiveProgramEXT"))
-	gpActiveShaderProgram = (C.GPACTIVESHADERPROGRAM)(getProcAddr("glActiveShaderProgram"))
-	if gpActiveShaderProgram == nil {
-		return errors.New("glActiveShaderProgram")
-	}
-	gpActiveShaderProgramEXT = (C.GPACTIVESHADERPROGRAMEXT)(getProcAddr("glActiveShaderProgramEXT"))
-	gpActiveTexture = (C.GPACTIVETEXTURE)(getProcAddr("glActiveTexture"))
-	if gpActiveTexture == nil {
-		return errors.New("glActiveTexture")
-	}
-	gpAlphaFuncQCOM = (C.GPALPHAFUNCQCOM)(getProcAddr("glAlphaFuncQCOM"))
-	gpApplyFramebufferAttachmentCMAAINTEL = (C.GPAPPLYFRAMEBUFFERATTACHMENTCMAAINTEL)(getProcAddr("glApplyFramebufferAttachmentCMAAINTEL"))
-	gpAttachShader = (C.GPATTACHSHADER)(getProcAddr("glAttachShader"))
-	if gpAttachShader == nil {
-		return errors.New("glAttachShader")
-	}
-	gpBeginConditionalRenderNV = (C.GPBEGINCONDITIONALRENDERNV)(getProcAddr("glBeginConditionalRenderNV"))
-	gpBeginPerfMonitorAMD = (C.GPBEGINPERFMONITORAMD)(getProcAddr("glBeginPerfMonitorAMD"))
-	gpBeginPerfQueryINTEL = (C.GPBEGINPERFQUERYINTEL)(getProcAddr("glBeginPerfQueryINTEL"))
-	gpBeginQuery = (C.GPBEGINQUERY)(getProcAddr("glBeginQuery"))
-	if gpBeginQuery == nil {
-		return errors.New("glBeginQuery")
-	}
-	gpBeginQueryEXT = (C.GPBEGINQUERYEXT)(getProcAddr("glBeginQueryEXT"))
-	gpBeginTransformFeedback = (C.GPBEGINTRANSFORMFEEDBACK)(getProcAddr("glBeginTransformFeedback"))
-	if gpBeginTransformFeedback == nil {
-		return errors.New("glBeginTransformFeedback")
-	}
-	gpBindAttribLocation = (C.GPBINDATTRIBLOCATION)(getProcAddr("glBindAttribLocation"))
-	if gpBindAttribLocation == nil {
-		return errors.New("glBindAttribLocation")
-	}
-	gpBindBuffer = (C.GPBINDBUFFER)(getProcAddr("glBindBuffer"))
-	if gpBindBuffer == nil {
-		return errors.New("glBindBuffer")
-	}
-	gpBindBufferBase = (C.GPBINDBUFFERBASE)(getProcAddr("glBindBufferBase"))
-	if gpBindBufferBase == nil {
-		return errors.New("glBindBufferBase")
-	}
-	gpBindBufferRange = (C.GPBINDBUFFERRANGE)(getProcAddr("glBindBufferRange"))
-	if gpBindBufferRange == nil {
-		return errors.New("glBindBufferRange")
-	}
-	gpBindFragDataLocationEXT = (C.GPBINDFRAGDATALOCATIONEXT)(getProcAddr("glBindFragDataLocationEXT"))
-	gpBindFragDataLocationIndexedEXT = (C.GPBINDFRAGDATALOCATIONINDEXEDEXT)(getProcAddr("glBindFragDataLocationIndexedEXT"))
-	gpBindFramebuffer = (C.GPBINDFRAMEBUFFER)(getProcAddr("glBindFramebuffer"))
-	if gpBindFramebuffer == nil {
-		return errors.New("glBindFramebuffer")
-	}
-	gpBindImageTexture = (C.GPBINDIMAGETEXTURE)(getProcAddr("glBindImageTexture"))
-	if gpBindImageTexture == nil {
-		return errors.New("glBindImageTexture")
-	}
-	gpBindProgramPipeline = (C.GPBINDPROGRAMPIPELINE)(getProcAddr("glBindProgramPipeline"))
-	if gpBindProgramPipeline == nil {
-		return errors.New("glBindProgramPipeline")
-	}
-	gpBindProgramPipelineEXT = (C.GPBINDPROGRAMPIPELINEEXT)(getProcAddr("glBindProgramPipelineEXT"))
-	gpBindRenderbuffer = (C.GPBINDRENDERBUFFER)(getProcAddr("glBindRenderbuffer"))
-	if gpBindRenderbuffer == nil {
-		return errors.New("glBindRenderbuffer")
-	}
-	gpBindSampler = (C.GPBINDSAMPLER)(getProcAddr("glBindSampler"))
-	if gpBindSampler == nil {
-		return errors.New("glBindSampler")
-	}
-	gpBindShadingRateImageNV = (C.GPBINDSHADINGRATEIMAGENV)(getProcAddr("glBindShadingRateImageNV"))
-	gpBindTexture = (C.GPBINDTEXTURE)(getProcAddr("glBindTexture"))
-	if gpBindTexture == nil {
-		return errors.New("glBindTexture")
-	}
-	gpBindTransformFeedback = (C.GPBINDTRANSFORMFEEDBACK)(getProcAddr("glBindTransformFeedback"))
-	if gpBindTransformFeedback == nil {
-		return errors.New("glBindTransformFeedback")
-	}
-	gpBindVertexArray = (C.GPBINDVERTEXARRAY)(getProcAddr("glBindVertexArray"))
-	if gpBindVertexArray == nil {
-		return errors.New("glBindVertexArray")
-	}
-	gpBindVertexArrayOES = (C.GPBINDVERTEXARRAYOES)(getProcAddr("glBindVertexArrayOES"))
-	gpBindVertexBuffer = (C.GPBINDVERTEXBUFFER)(getProcAddr("glBindVertexBuffer"))
-	if gpBindVertexBuffer == nil {
-		return errors.New("glBindVertexBuffer")
-	}
-	gpBlendBarrier = (C.GPBLENDBARRIER)(getProcAddr("glBlendBarrier"))
-	if gpBlendBarrier == nil {
-		return errors.New("glBlendBarrier")
-	}
-	gpBlendBarrierKHR = (C.GPBLENDBARRIERKHR)(getProcAddr("glBlendBarrierKHR"))
-	gpBlendBarrierNV = (C.GPBLENDBARRIERNV)(getProcAddr("glBlendBarrierNV"))
-	gpBlendColor = (C.GPBLENDCOLOR)(getProcAddr("glBlendColor"))
-	if gpBlendColor == nil {
-		return errors.New("glBlendColor")
-	}
-	gpBlendEquation = (C.GPBLENDEQUATION)(getProcAddr("glBlendEquation"))
-	if gpBlendEquation == nil {
-		return errors.New("glBlendEquation")
-	}
-	gpBlendEquationEXT = (C.GPBLENDEQUATIONEXT)(getProcAddr("glBlendEquationEXT"))
-	gpBlendEquationSeparate = (C.GPBLENDEQUATIONSEPARATE)(getProcAddr("glBlendEquationSeparate"))
-	if gpBlendEquationSeparate == nil {
-		return errors.New("glBlendEquationSeparate")
-	}
-	gpBlendEquationSeparatei = (C.GPBLENDEQUATIONSEPARATEI)(getProcAddr("glBlendEquationSeparatei"))
-	if gpBlendEquationSeparatei == nil {
-		return errors.New("glBlendEquationSeparatei")
-	}
-	gpBlendEquationSeparateiEXT = (C.GPBLENDEQUATIONSEPARATEIEXT)(getProcAddr("glBlendEquationSeparateiEXT"))
-	gpBlendEquationSeparateiOES = (C.GPBLENDEQUATIONSEPARATEIOES)(getProcAddr("glBlendEquationSeparateiOES"))
-	gpBlendEquationi = (C.GPBLENDEQUATIONI)(getProcAddr("glBlendEquationi"))
-	if gpBlendEquationi == nil {
-		return errors.New("glBlendEquationi")
-	}
-	gpBlendEquationiEXT = (C.GPBLENDEQUATIONIEXT)(getProcAddr("glBlendEquationiEXT"))
-	gpBlendEquationiOES = (C.GPBLENDEQUATIONIOES)(getProcAddr("glBlendEquationiOES"))
-	gpBlendFunc = (C.GPBLENDFUNC)(getProcAddr("glBlendFunc"))
-	if gpBlendFunc == nil {
-		return errors.New("glBlendFunc")
-	}
-	gpBlendFuncSeparate = (C.GPBLENDFUNCSEPARATE)(getProcAddr("glBlendFuncSeparate"))
-	if gpBlendFuncSeparate == nil {
-		return errors.New("glBlendFuncSeparate")
-	}
-	gpBlendFuncSeparatei = (C.GPBLENDFUNCSEPARATEI)(getProcAddr("glBlendFuncSeparatei"))
-	if gpBlendFuncSeparatei == nil {
-		return errors.New("glBlendFuncSeparatei")
-	}
-	gpBlendFuncSeparateiEXT = (C.GPBLENDFUNCSEPARATEIEXT)(getProcAddr("glBlendFuncSeparateiEXT"))
-	gpBlendFuncSeparateiOES = (C.GPBLENDFUNCSEPARATEIOES)(getProcAddr("glBlendFuncSeparateiOES"))
-	gpBlendFunci = (C.GPBLENDFUNCI)(getProcAddr("glBlendFunci"))
-	if gpBlendFunci == nil {
-		return errors.New("glBlendFunci")
-	}
-	gpBlendFunciEXT = (C.GPBLENDFUNCIEXT)(getProcAddr("glBlendFunciEXT"))
-	gpBlendFunciOES = (C.GPBLENDFUNCIOES)(getProcAddr("glBlendFunciOES"))
-	gpBlendParameteriNV = (C.GPBLENDPARAMETERINV)(getProcAddr("glBlendParameteriNV"))
-	gpBlitFramebuffer = (C.GPBLITFRAMEBUFFER)(getProcAddr("glBlitFramebuffer"))
-	if gpBlitFramebuffer == nil {
-		return errors.New("glBlitFramebuffer")
-	}
-	gpBlitFramebufferANGLE = (C.GPBLITFRAMEBUFFERANGLE)(getProcAddr("glBlitFramebufferANGLE"))
-	gpBlitFramebufferLayerEXT = (C.GPBLITFRAMEBUFFERLAYEREXT)(getProcAddr("glBlitFramebufferLayerEXT"))
-	gpBlitFramebufferLayersEXT = (C.GPBLITFRAMEBUFFERLAYERSEXT)(getProcAddr("glBlitFramebufferLayersEXT"))
-	gpBlitFramebufferNV = (C.GPBLITFRAMEBUFFERNV)(getProcAddr("glBlitFramebufferNV"))
-	gpBufferAttachMemoryNV = (C.GPBUFFERATTACHMEMORYNV)(getProcAddr("glBufferAttachMemoryNV"))
-	gpBufferData = (C.GPBUFFERDATA)(getProcAddr("glBufferData"))
-	if gpBufferData == nil {
-		return errors.New("glBufferData")
-	}
-	gpBufferPageCommitmentMemNV = (C.GPBUFFERPAGECOMMITMENTMEMNV)(getProcAddr("glBufferPageCommitmentMemNV"))
-	gpBufferStorageEXT = (C.GPBUFFERSTORAGEEXT)(getProcAddr("glBufferStorageEXT"))
-	gpBufferStorageExternalEXT = (C.GPBUFFERSTORAGEEXTERNALEXT)(getProcAddr("glBufferStorageExternalEXT"))
-	gpBufferStorageMemEXT = (C.GPBUFFERSTORAGEMEMEXT)(getProcAddr("glBufferStorageMemEXT"))
-	gpBufferSubData = (C.GPBUFFERSUBDATA)(getProcAddr("glBufferSubData"))
-	if gpBufferSubData == nil {
-		return errors.New("glBufferSubData")
-	}
-	gpCheckFramebufferStatus = (C.GPCHECKFRAMEBUFFERSTATUS)(getProcAddr("glCheckFramebufferStatus"))
-	if gpCheckFramebufferStatus == nil {
-		return errors.New("glCheckFramebufferStatus")
-	}
-	gpClear = (C.GPCLEAR)(getProcAddr("glClear"))
-	if gpClear == nil {
-		return errors.New("glClear")
-	}
-	gpClearBufferfi = (C.GPCLEARBUFFERFI)(getProcAddr("glClearBufferfi"))
-	if gpClearBufferfi == nil {
-		return errors.New("glClearBufferfi")
-	}
-	gpClearBufferfv = (C.GPCLEARBUFFERFV)(getProcAddr("glClearBufferfv"))
-	if gpClearBufferfv == nil {
-		return errors.New("glClearBufferfv")
-	}
-	gpClearBufferiv = (C.GPCLEARBUFFERIV)(getProcAddr("glClearBufferiv"))
-	if gpClearBufferiv == nil {
-		return errors.New("glClearBufferiv")
-	}
-	gpClearBufferuiv = (C.GPCLEARBUFFERUIV)(getProcAddr("glClearBufferuiv"))
-	if gpClearBufferuiv == nil {
-		return errors.New("glClearBufferuiv")
-	}
-	gpClearColor = (C.GPCLEARCOLOR)(getProcAddr("glClearColor"))
-	if gpClearColor == nil {
-		return errors.New("glClearColor")
-	}
-	gpClearDepthf = (C.GPCLEARDEPTHF)(getProcAddr("glClearDepthf"))
-	if gpClearDepthf == nil {
-		return errors.New("glClearDepthf")
-	}
-	gpClearPixelLocalStorageuiEXT = (C.GPCLEARPIXELLOCALSTORAGEUIEXT)(getProcAddr("glClearPixelLocalStorageuiEXT"))
-	gpClearStencil = (C.GPCLEARSTENCIL)(getProcAddr("glClearStencil"))
-	if gpClearStencil == nil {
-		return errors.New("glClearStencil")
-	}
-	gpClearTexImageEXT = (C.GPCLEARTEXIMAGEEXT)(getProcAddr("glClearTexImageEXT"))
-	gpClearTexSubImageEXT = (C.GPCLEARTEXSUBIMAGEEXT)(getProcAddr("glClearTexSubImageEXT"))
-	gpClientWaitSync = (C.GPCLIENTWAITSYNC)(getProcAddr("glClientWaitSync"))
-	if gpClientWaitSync == nil {
-		return errors.New("glClientWaitSync")
-	}
-	gpClientWaitSyncAPPLE = (C.GPCLIENTWAITSYNCAPPLE)(getProcAddr("glClientWaitSyncAPPLE"))
-	gpClipControlEXT = (C.GPCLIPCONTROLEXT)(getProcAddr("glClipControlEXT"))
-	gpColorMask = (C.GPCOLORMASK)(getProcAddr("glColorMask"))
-	if gpColorMask == nil {
-		return errors.New("glColorMask")
-	}
-	gpColorMaski = (C.GPCOLORMASKI)(getProcAddr("glColorMaski"))
-	if gpColorMaski == nil {
-		return errors.New("glColorMaski")
-	}
-	gpColorMaskiEXT = (C.GPCOLORMASKIEXT)(getProcAddr("glColorMaskiEXT"))
-	gpColorMaskiOES = (C.GPCOLORMASKIOES)(getProcAddr("glColorMaskiOES"))
-	gpCompileShader = (C.GPCOMPILESHADER)(getProcAddr("glCompileShader"))
-	if gpCompileShader == nil {
-		return errors.New("glCompileShader")
-	}
-	gpCompressedTexImage2D = (C.GPCOMPRESSEDTEXIMAGE2D)(getProcAddr("glCompressedTexImage2D"))
-	if gpCompressedTexImage2D == nil {
-		return errors.New("glCompressedTexImage2D")
-	}
-	gpCompressedTexImage3D = (C.GPCOMPRESSEDTEXIMAGE3D)(getProcAddr("glCompressedTexImage3D"))
-	if gpCompressedTexImage3D == nil {
-		return errors.New("glCompressedTexImage3D")
-	}
-	gpCompressedTexImage3DOES = (C.GPCOMPRESSEDTEXIMAGE3DOES)(getProcAddr("glCompressedTexImage3DOES"))
-	gpCompressedTexSubImage2D = (C.GPCOMPRESSEDTEXSUBIMAGE2D)(getProcAddr("glCompressedTexSubImage2D"))
-	if gpCompressedTexSubImage2D == nil {
-		return errors.New("glCompressedTexSubImage2D")
-	}
-	gpCompressedTexSubImage3D = (C.GPCOMPRESSEDTEXSUBIMAGE3D)(getProcAddr("glCompressedTexSubImage3D"))
-	if gpCompressedTexSubImage3D == nil {
-		return errors.New("glCompressedTexSubImage3D")
-	}
-	gpCompressedTexSubImage3DOES = (C.GPCOMPRESSEDTEXSUBIMAGE3DOES)(getProcAddr("glCompressedTexSubImage3DOES"))
-	gpConservativeRasterParameteriNV = (C.GPCONSERVATIVERASTERPARAMETERINV)(getProcAddr("glConservativeRasterParameteriNV"))
-	gpCopyBufferSubData = (C.GPCOPYBUFFERSUBDATA)(getProcAddr("glCopyBufferSubData"))
-	if gpCopyBufferSubData == nil {
-		return errors.New("glCopyBufferSubData")
-	}
-	gpCopyBufferSubDataNV = (C.GPCOPYBUFFERSUBDATANV)(getProcAddr("glCopyBufferSubDataNV"))
-	gpCopyImageSubData = (C.GPCOPYIMAGESUBDATA)(getProcAddr("glCopyImageSubData"))
-	if gpCopyImageSubData == nil {
-		return errors.New("glCopyImageSubData")
-	}
-	gpCopyImageSubDataEXT = (C.GPCOPYIMAGESUBDATAEXT)(getProcAddr("glCopyImageSubDataEXT"))
-	gpCopyImageSubDataOES = (C.GPCOPYIMAGESUBDATAOES)(getProcAddr("glCopyImageSubDataOES"))
-	gpCopyPathNV = (C.GPCOPYPATHNV)(getProcAddr("glCopyPathNV"))
-	gpCopyTexImage2D = (C.GPCOPYTEXIMAGE2D)(getProcAddr("glCopyTexImage2D"))
-	if gpCopyTexImage2D == nil {
-		return errors.New("glCopyTexImage2D")
-	}
-	gpCopyTexSubImage2D = (C.GPCOPYTEXSUBIMAGE2D)(getProcAddr("glCopyTexSubImage2D"))
-	if gpCopyTexSubImage2D == nil {
-		return errors.New("glCopyTexSubImage2D")
-	}
-	gpCopyTexSubImage3D = (C.GPCOPYTEXSUBIMAGE3D)(getProcAddr("glCopyTexSubImage3D"))
-	if gpCopyTexSubImage3D == nil {
-		return errors.New("glCopyTexSubImage3D")
-	}
-	gpCopyTexSubImage3DOES = (C.GPCOPYTEXSUBIMAGE3DOES)(getProcAddr("glCopyTexSubImage3DOES"))
-	gpCopyTextureLevelsAPPLE = (C.GPCOPYTEXTURELEVELSAPPLE)(getProcAddr("glCopyTextureLevelsAPPLE"))
-	gpCoverFillPathInstancedNV = (C.GPCOVERFILLPATHINSTANCEDNV)(getProcAddr("glCoverFillPathInstancedNV"))
-	gpCoverFillPathNV = (C.GPCOVERFILLPATHNV)(getProcAddr("glCoverFillPathNV"))
-	gpCoverStrokePathInstancedNV = (C.GPCOVERSTROKEPATHINSTANCEDNV)(getProcAddr("glCoverStrokePathInstancedNV"))
-	gpCoverStrokePathNV = (C.GPCOVERSTROKEPATHNV)(getProcAddr("glCoverStrokePathNV"))
-	gpCoverageMaskNV = (C.GPCOVERAGEMASKNV)(getProcAddr("glCoverageMaskNV"))
-	gpCoverageModulationNV = (C.GPCOVERAGEMODULATIONNV)(getProcAddr("glCoverageModulationNV"))
-	gpCoverageModulationTableNV = (C.GPCOVERAGEMODULATIONTABLENV)(getProcAddr("glCoverageModulationTableNV"))
-	gpCoverageOperationNV = (C.GPCOVERAGEOPERATIONNV)(getProcAddr("glCoverageOperationNV"))
-	gpCreateMemoryObjectsEXT = (C.GPCREATEMEMORYOBJECTSEXT)(getProcAddr("glCreateMemoryObjectsEXT"))
-	gpCreatePerfQueryINTEL = (C.GPCREATEPERFQUERYINTEL)(getProcAddr("glCreatePerfQueryINTEL"))
-	gpCreateProgram = (C.GPCREATEPROGRAM)(getProcAddr("glCreateProgram"))
-	if gpCreateProgram == nil {
-		return errors.New("glCreateProgram")
-	}
-	gpCreateSemaphoresNV = (C.GPCREATESEMAPHORESNV)(getProcAddr("glCreateSemaphoresNV"))
-	gpCreateShader = (C.GPCREATESHADER)(getProcAddr("glCreateShader"))
-	if gpCreateShader == nil {
-		return errors.New("glCreateShader")
-	}
-	gpCreateShaderProgramEXT = (C.GPCREATESHADERPROGRAMEXT)(getProcAddr("glCreateShaderProgramEXT"))
-	gpCreateShaderProgramv = (C.GPCREATESHADERPROGRAMV)(getProcAddr("glCreateShaderProgramv"))
-	if gpCreateShaderProgramv == nil {
-		return errors.New("glCreateShaderProgramv")
-	}
-	gpCreateShaderProgramvEXT = (C.GPCREATESHADERPROGRAMVEXT)(getProcAddr("glCreateShaderProgramvEXT"))
-	gpCullFace = (C.GPCULLFACE)(getProcAddr("glCullFace"))
-	if gpCullFace == nil {
-		return errors.New("glCullFace")
-	}
-	gpDebugMessageCallback = (C.GPDEBUGMESSAGECALLBACK)(getProcAddr("glDebugMessageCallback"))
-	if gpDebugMessageCallback == nil {
-		return errors.New("glDebugMessageCallback")
-	}
-	gpDebugMessageCallbackKHR = (C.GPDEBUGMESSAGECALLBACKKHR)(getProcAddr("glDebugMessageCallbackKHR"))
-	gpDebugMessageControl = (C.GPDEBUGMESSAGECONTROL)(getProcAddr("glDebugMessageControl"))
-	if gpDebugMessageControl == nil {
-		return errors.New("glDebugMessageControl")
-	}
-	gpDebugMessageControlKHR = (C.GPDEBUGMESSAGECONTROLKHR)(getProcAddr("glDebugMessageControlKHR"))
-	gpDebugMessageInsert = (C.GPDEBUGMESSAGEINSERT)(getProcAddr("glDebugMessageInsert"))
-	if gpDebugMessageInsert == nil {
-		return errors.New("glDebugMessageInsert")
-	}
-	gpDebugMessageInsertKHR = (C.GPDEBUGMESSAGEINSERTKHR)(getProcAddr("glDebugMessageInsertKHR"))
-	gpDeleteBuffers = (C.GPDELETEBUFFERS)(getProcAddr("glDeleteBuffers"))
-	if gpDeleteBuffers == nil {
-		return errors.New("glDeleteBuffers")
-	}
-	gpDeleteFencesNV = (C.GPDELETEFENCESNV)(getProcAddr("glDeleteFencesNV"))
-	gpDeleteFramebuffers = (C.GPDELETEFRAMEBUFFERS)(getProcAddr("glDeleteFramebuffers"))
-	if gpDeleteFramebuffers == nil {
-		return errors.New("glDeleteFramebuffers")
-	}
-	gpDeleteMemoryObjectsEXT = (C.GPDELETEMEMORYOBJECTSEXT)(getProcAddr("glDeleteMemoryObjectsEXT"))
-	gpDeletePathsNV = (C.GPDELETEPATHSNV)(getProcAddr("glDeletePathsNV"))
-	gpDeletePerfMonitorsAMD = (C.GPDELETEPERFMONITORSAMD)(getProcAddr("glDeletePerfMonitorsAMD"))
-	gpDeletePerfQueryINTEL = (C.GPDELETEPERFQUERYINTEL)(getProcAddr("glDeletePerfQueryINTEL"))
-	gpDeleteProgram = (C.GPDELETEPROGRAM)(getProcAddr("glDeleteProgram"))
-	if gpDeleteProgram == nil {
-		return errors.New("glDeleteProgram")
-	}
-	gpDeleteProgramPipelines = (C.GPDELETEPROGRAMPIPELINES)(getProcAddr("glDeleteProgramPipelines"))
-	if gpDeleteProgramPipelines == nil {
-		return errors.New("glDeleteProgramPipelines")
-	}
-	gpDeleteProgramPipelinesEXT = (C.GPDELETEPROGRAMPIPELINESEXT)(getProcAddr("glDeleteProgramPipelinesEXT"))
-	gpDeleteQueries = (C.GPDELETEQUERIES)(getProcAddr("glDeleteQueries"))
-	if gpDeleteQueries == nil {
-		return errors.New("glDeleteQueries")
-	}
-	gpDeleteQueriesEXT = (C.GPDELETEQUERIESEXT)(getProcAddr("glDeleteQueriesEXT"))
-	gpDeleteRenderbuffers = (C.GPDELETERENDERBUFFERS)(getProcAddr("glDeleteRenderbuffers"))
-	if gpDeleteRenderbuffers == nil {
-		return errors.New("glDeleteRenderbuffers")
-	}
-	gpDeleteSamplers = (C.GPDELETESAMPLERS)(getProcAddr("glDeleteSamplers"))
-	if gpDeleteSamplers == nil {
-		return errors.New("glDeleteSamplers")
-	}
-	gpDeleteSemaphoresEXT = (C.GPDELETESEMAPHORESEXT)(getProcAddr("glDeleteSemaphoresEXT"))
-	gpDeleteShader = (C.GPDELETESHADER)(getProcAddr("glDeleteShader"))
-	if gpDeleteShader == nil {
-		return errors.New("glDeleteShader")
-	}
-	gpDeleteSync = (C.GPDELETESYNC)(getProcAddr("glDeleteSync"))
-	if gpDeleteSync == nil {
-		return errors.New("glDeleteSync")
-	}
-	gpDeleteSyncAPPLE = (C.GPDELETESYNCAPPLE)(getProcAddr("glDeleteSyncAPPLE"))
-	gpDeleteTextures = (C.GPDELETETEXTURES)(getProcAddr("glDeleteTextures"))
-	if gpDeleteTextures == nil {
-		return errors.New("glDeleteTextures")
-	}
-	gpDeleteTransformFeedbacks = (C.GPDELETETRANSFORMFEEDBACKS)(getProcAddr("glDeleteTransformFeedbacks"))
-	if gpDeleteTransformFeedbacks == nil {
-		return errors.New("glDeleteTransformFeedbacks")
-	}
-	gpDeleteVertexArrays = (C.GPDELETEVERTEXARRAYS)(getProcAddr("glDeleteVertexArrays"))
-	if gpDeleteVertexArrays == nil {
-		return errors.New("glDeleteVertexArrays")
-	}
-	gpDeleteVertexArraysOES = (C.GPDELETEVERTEXARRAYSOES)(getProcAddr("glDeleteVertexArraysOES"))
-	gpDepthFunc = (C.GPDEPTHFUNC)(getProcAddr("glDepthFunc"))
-	if gpDepthFunc == nil {
-		return errors.New("glDepthFunc")
-	}
-	gpDepthMask = (C.GPDEPTHMASK)(getProcAddr("glDepthMask"))
-	if gpDepthMask == nil {
-		return errors.New("glDepthMask")
-	}
-	gpDepthRangeArrayfvNV = (C.GPDEPTHRANGEARRAYFVNV)(getProcAddr("glDepthRangeArrayfvNV"))
-	gpDepthRangeArrayfvOES = (C.GPDEPTHRANGEARRAYFVOES)(getProcAddr("glDepthRangeArrayfvOES"))
-	gpDepthRangeIndexedfNV = (C.GPDEPTHRANGEINDEXEDFNV)(getProcAddr("glDepthRangeIndexedfNV"))
-	gpDepthRangeIndexedfOES = (C.GPDEPTHRANGEINDEXEDFOES)(getProcAddr("glDepthRangeIndexedfOES"))
-	gpDepthRangef = (C.GPDEPTHRANGEF)(getProcAddr("glDepthRangef"))
-	if gpDepthRangef == nil {
-		return errors.New("glDepthRangef")
-	}
-	gpDetachShader = (C.GPDETACHSHADER)(getProcAddr("glDetachShader"))
-	if gpDetachShader == nil {
-		return errors.New("glDetachShader")
-	}
-	gpDisable = (C.GPDISABLE)(getProcAddr("glDisable"))
-	if gpDisable == nil {
-		return errors.New("glDisable")
-	}
-	gpDisableDriverControlQCOM = (C.GPDISABLEDRIVERCONTROLQCOM)(getProcAddr("glDisableDriverControlQCOM"))
-	gpDisableVertexAttribArray = (C.GPDISABLEVERTEXATTRIBARRAY)(getProcAddr("glDisableVertexAttribArray"))
-	if gpDisableVertexAttribArray == nil {
-		return errors.New("glDisableVertexAttribArray")
-	}
-	gpDisablei = (C.GPDISABLEI)(getProcAddr("glDisablei"))
-	if gpDisablei == nil {
-		return errors.New("glDisablei")
-	}
-	gpDisableiEXT = (C.GPDISABLEIEXT)(getProcAddr("glDisableiEXT"))
-	gpDisableiNV = (C.GPDISABLEINV)(getProcAddr("glDisableiNV"))
-	gpDisableiOES = (C.GPDISABLEIOES)(getProcAddr("glDisableiOES"))
-	gpDiscardFramebufferEXT = (C.GPDISCARDFRAMEBUFFEREXT)(getProcAddr("glDiscardFramebufferEXT"))
-	gpDispatchCompute = (C.GPDISPATCHCOMPUTE)(getProcAddr("glDispatchCompute"))
-	if gpDispatchCompute == nil {
-		return errors.New("glDispatchCompute")
-	}
-	gpDispatchComputeIndirect = (C.GPDISPATCHCOMPUTEINDIRECT)(getProcAddr("glDispatchComputeIndirect"))
-	if gpDispatchComputeIndirect == nil {
-		return errors.New("glDispatchComputeIndirect")
-	}
-	gpDrawArrays = (C.GPDRAWARRAYS)(getProcAddr("glDrawArrays"))
-	if gpDrawArrays == nil {
-		return errors.New("glDrawArrays")
-	}
-	gpDrawArraysIndirect = (C.GPDRAWARRAYSINDIRECT)(getProcAddr("glDrawArraysIndirect"))
-	if gpDrawArraysIndirect == nil {
-		return errors.New("glDrawArraysIndirect")
-	}
-	gpDrawArraysInstanced = (C.GPDRAWARRAYSINSTANCED)(getProcAddr("glDrawArraysInstanced"))
-	if gpDrawArraysInstanced == nil {
-		return errors.New("glDrawArraysInstanced")
-	}
-	gpDrawArraysInstancedANGLE = (C.GPDRAWARRAYSINSTANCEDANGLE)(getProcAddr("glDrawArraysInstancedANGLE"))
-	gpDrawArraysInstancedBaseInstanceEXT = (C.GPDRAWARRAYSINSTANCEDBASEINSTANCEEXT)(getProcAddr("glDrawArraysInstancedBaseInstanceEXT"))
-	gpDrawArraysInstancedEXT = (C.GPDRAWARRAYSINSTANCEDEXT)(getProcAddr("glDrawArraysInstancedEXT"))
-	gpDrawArraysInstancedNV = (C.GPDRAWARRAYSINSTANCEDNV)(getProcAddr("glDrawArraysInstancedNV"))
-	gpDrawBuffers = (C.GPDRAWBUFFERS)(getProcAddr("glDrawBuffers"))
-	if gpDrawBuffers == nil {
-		return errors.New("glDrawBuffers")
-	}
-	gpDrawBuffersEXT = (C.GPDRAWBUFFERSEXT)(getProcAddr("glDrawBuffersEXT"))
-	gpDrawBuffersIndexedEXT = (C.GPDRAWBUFFERSINDEXEDEXT)(getProcAddr("glDrawBuffersIndexedEXT"))
-	gpDrawBuffersNV = (C.GPDRAWBUFFERSNV)(getProcAddr("glDrawBuffersNV"))
-	gpDrawElements = (C.GPDRAWELEMENTS)(getProcAddr("glDrawElements"))
-	if gpDrawElements == nil {
-		return errors.New("glDrawElements")
-	}
-	gpDrawElementsBaseVertex = (C.GPDRAWELEMENTSBASEVERTEX)(getProcAddr("glDrawElementsBaseVertex"))
-	if gpDrawElementsBaseVertex == nil {
-		return errors.New("glDrawElementsBaseVertex")
-	}
-	gpDrawElementsBaseVertexEXT = (C.GPDRAWELEMENTSBASEVERTEXEXT)(getProcAddr("glDrawElementsBaseVertexEXT"))
-	gpDrawElementsBaseVertexOES = (C.GPDRAWELEMENTSBASEVERTEXOES)(getProcAddr("glDrawElementsBaseVertexOES"))
-	gpDrawElementsIndirect = (C.GPDRAWELEMENTSINDIRECT)(getProcAddr("glDrawElementsIndirect"))
-	if gpDrawElementsIndirect == nil {
-		return errors.New("glDrawElementsIndirect")
-	}
-	gpDrawElementsInstanced = (C.GPDRAWELEMENTSINSTANCED)(getProcAddr("glDrawElementsInstanced"))
-	if gpDrawElementsInstanced == nil {
-		return errors.New("glDrawElementsInstanced")
-	}
-	gpDrawElementsInstancedANGLE = (C.GPDRAWELEMENTSINSTANCEDANGLE)(getProcAddr("glDrawElementsInstancedANGLE"))
-	gpDrawElementsInstancedBaseInstanceEXT = (C.GPDRAWELEMENTSINSTANCEDBASEINSTANCEEXT)(getProcAddr("glDrawElementsInstancedBaseInstanceEXT"))
-	gpDrawElementsInstancedBaseVertex = (C.GPDRAWELEMENTSINSTANCEDBASEVERTEX)(getProcAddr("glDrawElementsInstancedBaseVertex"))
-	if gpDrawElementsInstancedBaseVertex == nil {
-		return errors.New("glDrawElementsInstancedBaseVertex")
-	}
-	gpDrawElementsInstancedBaseVertexBaseInstanceEXT = (C.GPDRAWELEMENTSINSTANCEDBASEVERTEXBASEINSTANCEEXT)(getProcAddr("glDrawElementsInstancedBaseVertexBaseInstanceEXT"))
-	gpDrawElementsInstancedBaseVertexEXT = (C.GPDRAWELEMENTSINSTANCEDBASEVERTEXEXT)(getProcAddr("glDrawElementsInstancedBaseVertexEXT"))
-	gpDrawElementsInstancedBaseVertexOES = (C.GPDRAWELEMENTSINSTANCEDBASEVERTEXOES)(getProcAddr("glDrawElementsInstancedBaseVertexOES"))
-	gpDrawElementsInstancedEXT = (C.GPDRAWELEMENTSINSTANCEDEXT)(getProcAddr("glDrawElementsInstancedEXT"))
-	gpDrawElementsInstancedNV = (C.GPDRAWELEMENTSINSTANCEDNV)(getProcAddr("glDrawElementsInstancedNV"))
-	gpDrawMeshTasksEXT = (C.GPDRAWMESHTASKSEXT)(getProcAddr("glDrawMeshTasksEXT"))
-	gpDrawMeshTasksIndirectEXT = (C.GPDRAWMESHTASKSINDIRECTEXT)(getProcAddr("glDrawMeshTasksIndirectEXT"))
-	gpDrawMeshTasksIndirectNV = (C.GPDRAWMESHTASKSINDIRECTNV)(getProcAddr("glDrawMeshTasksIndirectNV"))
-	gpDrawMeshTasksNV = (C.GPDRAWMESHTASKSNV)(getProcAddr("glDrawMeshTasksNV"))
-	gpDrawRangeElements = (C.GPDRAWRANGEELEMENTS)(getProcAddr("glDrawRangeElements"))
-	if gpDrawRangeElements == nil {
-		return errors.New("glDrawRangeElements")
-	}
-	gpDrawRangeElementsBaseVertex = (C.GPDRAWRANGEELEMENTSBASEVERTEX)(getProcAddr("glDrawRangeElementsBaseVertex"))
-	if gpDrawRangeElementsBaseVertex == nil {
-		return errors.New("glDrawRangeElementsBaseVertex")
-	}
-	gpDrawRangeElementsBaseVertexEXT = (C.GPDRAWRANGEELEMENTSBASEVERTEXEXT)(getProcAddr("glDrawRangeElementsBaseVertexEXT"))
-	gpDrawRangeElementsBaseVertexOES = (C.GPDRAWRANGEELEMENTSBASEVERTEXOES)(getProcAddr("glDrawRangeElementsBaseVertexOES"))
-	gpDrawTransformFeedbackEXT = (C.GPDRAWTRANSFORMFEEDBACKEXT)(getProcAddr("glDrawTransformFeedbackEXT"))
-	gpDrawTransformFeedbackInstancedEXT = (C.GPDRAWTRANSFORMFEEDBACKINSTANCEDEXT)(getProcAddr("glDrawTransformFeedbackInstancedEXT"))
-	gpDrawVkImageNV = (C.GPDRAWVKIMAGENV)(getProcAddr("glDrawVkImageNV"))
-	gpEGLImageTargetRenderbufferStorageOES = (C.GPEGLIMAGETARGETRENDERBUFFERSTORAGEOES)(getProcAddr("glEGLImageTargetRenderbufferStorageOES"))
-	gpEGLImageTargetTexStorageEXT = (C.GPEGLIMAGETARGETTEXSTORAGEEXT)(getProcAddr("glEGLImageTargetTexStorageEXT"))
-	gpEGLImageTargetTexture2DOES = (C.GPEGLIMAGETARGETTEXTURE2DOES)(getProcAddr("glEGLImageTargetTexture2DOES"))
-	gpEGLImageTargetTextureStorageEXT = (C.GPEGLIMAGETARGETTEXTURESTORAGEEXT)(getProcAddr("glEGLImageTargetTextureStorageEXT"))
-	gpEnable = (C.GPENABLE)(getProcAddr("glEnable"))
-	if gpEnable == nil {
-		return errors.New("glEnable")
-	}
-	gpEnableDriverControlQCOM = (C.GPENABLEDRIVERCONTROLQCOM)(getProcAddr("glEnableDriverControlQCOM"))
-	gpEnableVertexAttribArray = (C.GPENABLEVERTEXATTRIBARRAY)(getProcAddr("glEnableVertexAttribArray"))
-	if gpEnableVertexAttribArray == nil {
-		return errors.New("glEnableVertexAttribArray")
-	}
-	gpEnablei = (C.GPENABLEI)(getProcAddr("glEnablei"))
-	if gpEnablei == nil {
-		return errors.New("glEnablei")
-	}
-	gpEnableiEXT = (C.GPENABLEIEXT)(getProcAddr("glEnableiEXT"))
-	gpEnableiNV = (C.GPENABLEINV)(getProcAddr("glEnableiNV"))
-	gpEnableiOES = (C.GPENABLEIOES)(getProcAddr("glEnableiOES"))
-	gpEndConditionalRenderNV = (C.GPENDCONDITIONALRENDERNV)(getProcAddr("glEndConditionalRenderNV"))
-	gpEndPerfMonitorAMD = (C.GPENDPERFMONITORAMD)(getProcAddr("glEndPerfMonitorAMD"))
-	gpEndPerfQueryINTEL = (C.GPENDPERFQUERYINTEL)(getProcAddr("glEndPerfQueryINTEL"))
-	gpEndQuery = (C.GPENDQUERY)(getProcAddr("glEndQuery"))
-	if gpEndQuery == nil {
-		return errors.New("glEndQuery")
-	}
-	gpEndQueryEXT = (C.GPENDQUERYEXT)(getProcAddr("glEndQueryEXT"))
-	gpEndTilingQCOM = (C.GPENDTILINGQCOM)(getProcAddr("glEndTilingQCOM"))
-	gpEndTransformFeedback = (C.GPENDTRANSFORMFEEDBACK)(getProcAddr("glEndTransformFeedback"))
-	if gpEndTransformFeedback == nil {
-		return errors.New("glEndTransformFeedback")
-	}
-	gpExtGetBufferPointervQCOM = (C.GPEXTGETBUFFERPOINTERVQCOM)(getProcAddr("glExtGetBufferPointervQCOM"))
-	gpExtGetBuffersQCOM = (C.GPEXTGETBUFFERSQCOM)(getProcAddr("glExtGetBuffersQCOM"))
-	gpExtGetFramebuffersQCOM = (C.GPEXTGETFRAMEBUFFERSQCOM)(getProcAddr("glExtGetFramebuffersQCOM"))
-	gpExtGetProgramBinarySourceQCOM = (C.GPEXTGETPROGRAMBINARYSOURCEQCOM)(getProcAddr("glExtGetProgramBinarySourceQCOM"))
-	gpExtGetProgramsQCOM = (C.GPEXTGETPROGRAMSQCOM)(getProcAddr("glExtGetProgramsQCOM"))
-	gpExtGetRenderbuffersQCOM = (C.GPEXTGETRENDERBUFFERSQCOM)(getProcAddr("glExtGetRenderbuffersQCOM"))
-	gpExtGetShadersQCOM = (C.GPEXTGETSHADERSQCOM)(getProcAddr("glExtGetShadersQCOM"))
-	gpExtGetTexLevelParameterivQCOM = (C.GPEXTGETTEXLEVELPARAMETERIVQCOM)(getProcAddr("glExtGetTexLevelParameterivQCOM"))
-	gpExtGetTexSubImageQCOM = (C.GPEXTGETTEXSUBIMAGEQCOM)(getProcAddr("glExtGetTexSubImageQCOM"))
-	gpExtGetTexturesQCOM = (C.GPEXTGETTEXTURESQCOM)(getProcAddr("glExtGetTexturesQCOM"))
-	gpExtIsProgramBinaryQCOM = (C.GPEXTISPROGRAMBINARYQCOM)(getProcAddr("glExtIsProgramBinaryQCOM"))
-	gpExtTexObjectStateOverrideiQCOM = (C.GPEXTTEXOBJECTSTATEOVERRIDEIQCOM)(getProcAddr("glExtTexObjectStateOverrideiQCOM"))
-	gpExtrapolateTex2DQCOM = (C.GPEXTRAPOLATETEX2DQCOM)(getProcAddr("glExtrapolateTex2DQCOM"))
-	gpFenceSync = (C.GPFENCESYNC)(getProcAddr("glFenceSync"))
-	if gpFenceSync == nil {
-		return errors.New("glFenceSync")
-	}
-	gpFenceSyncAPPLE = (C.GPFENCESYNCAPPLE)(getProcAddr("glFenceSyncAPPLE"))
-	gpFinish = (C.GPFINISH)(getProcAddr("glFinish"))
-	if gpFinish == nil {
-		return errors.New("glFinish")
-	}
-	gpFinishFenceNV = (C.GPFINISHFENCENV)(getProcAddr("glFinishFenceNV"))
-	gpFlush = (C.GPFLUSH)(getProcAddr("glFlush"))
-	if gpFlush == nil {
-		return errors.New("glFlush")
-	}
-	gpFlushMappedBufferRange = (C.GPFLUSHMAPPEDBUFFERRANGE)(getProcAddr("glFlushMappedBufferRange"))
-	if gpFlushMappedBufferRange == nil {
-		return errors.New("glFlushMappedBufferRange")
-	}
-	gpFlushMappedBufferRangeEXT = (C.GPFLUSHMAPPEDBUFFERRANGEEXT)(getProcAddr("glFlushMappedBufferRangeEXT"))
-	gpFragmentCoverageColorNV = (C.GPFRAGMENTCOVERAGECOLORNV)(getProcAddr("glFragmentCoverageColorNV"))
-	gpFramebufferFetchBarrierEXT = (C.GPFRAMEBUFFERFETCHBARRIEREXT)(getProcAddr("glFramebufferFetchBarrierEXT"))
-	gpFramebufferFetchBarrierQCOM = (C.GPFRAMEBUFFERFETCHBARRIERQCOM)(getProcAddr("glFramebufferFetchBarrierQCOM"))
-	gpFramebufferFoveationConfigQCOM = (C.GPFRAMEBUFFERFOVEATIONCONFIGQCOM)(getProcAddr("glFramebufferFoveationConfigQCOM"))
-	gpFramebufferFoveationParametersQCOM = (C.GPFRAMEBUFFERFOVEATIONPARAMETERSQCOM)(getProcAddr("glFramebufferFoveationParametersQCOM"))
-	gpFramebufferParameteri = (C.GPFRAMEBUFFERPARAMETERI)(getProcAddr("glFramebufferParameteri"))
-	if gpFramebufferParameteri == nil {
-		return errors.New("glFramebufferParameteri")
-	}
-	gpFramebufferParameteriMESA = (C.GPFRAMEBUFFERPARAMETERIMESA)(getProcAddr("glFramebufferParameteriMESA"))
-	gpFramebufferPixelLocalStorageSizeEXT = (C.GPFRAMEBUFFERPIXELLOCALSTORAGESIZEEXT)(getProcAddr("glFramebufferPixelLocalStorageSizeEXT"))
-	gpFramebufferRenderbuffer = (C.GPFRAMEBUFFERRENDERBUFFER)(getProcAddr("glFramebufferRenderbuffer"))
-	if gpFramebufferRenderbuffer == nil {
-		return errors.New("glFramebufferRenderbuffer")
-	}
-	gpFramebufferSampleLocationsfvNV = (C.GPFRAMEBUFFERSAMPLELOCATIONSFVNV)(getProcAddr("glFramebufferSampleLocationsfvNV"))
-	gpFramebufferShadingRateEXT = (C.GPFRAMEBUFFERSHADINGRATEEXT)(getProcAddr("glFramebufferShadingRateEXT"))
-	gpFramebufferTexture = (C.GPFRAMEBUFFERTEXTURE)(getProcAddr("glFramebufferTexture"))
-	if gpFramebufferTexture == nil {
-		return errors.New("glFramebufferTexture")
-	}
-	gpFramebufferTexture2D = (C.GPFRAMEBUFFERTEXTURE2D)(getProcAddr("glFramebufferTexture2D"))
-	if gpFramebufferTexture2D == nil {
-		return errors.New("glFramebufferTexture2D")
-	}
-	gpFramebufferTexture2DDownsampleIMG = (C.GPFRAMEBUFFERTEXTURE2DDOWNSAMPLEIMG)(getProcAddr("glFramebufferTexture2DDownsampleIMG"))
-	gpFramebufferTexture2DMultisampleEXT = (C.GPFRAMEBUFFERTEXTURE2DMULTISAMPLEEXT)(getProcAddr("glFramebufferTexture2DMultisampleEXT"))
-	gpFramebufferTexture2DMultisampleIMG = (C.GPFRAMEBUFFERTEXTURE2DMULTISAMPLEIMG)(getProcAddr("glFramebufferTexture2DMultisampleIMG"))
-	gpFramebufferTexture3DOES = (C.GPFRAMEBUFFERTEXTURE3DOES)(getProcAddr("glFramebufferTexture3DOES"))
-	gpFramebufferTextureEXT = (C.GPFRAMEBUFFERTEXTUREEXT)(getProcAddr("glFramebufferTextureEXT"))
-	gpFramebufferTextureLayer = (C.GPFRAMEBUFFERTEXTURELAYER)(getProcAddr("glFramebufferTextureLayer"))
-	if gpFramebufferTextureLayer == nil {
-		return errors.New("glFramebufferTextureLayer")
-	}
-	gpFramebufferTextureLayerDownsampleIMG = (C.GPFRAMEBUFFERTEXTURELAYERDOWNSAMPLEIMG)(getProcAddr("glFramebufferTextureLayerDownsampleIMG"))
-	gpFramebufferTextureMultisampleMultiviewOVR = (C.GPFRAMEBUFFERTEXTUREMULTISAMPLEMULTIVIEWOVR)(getProcAddr("glFramebufferTextureMultisampleMultiviewOVR"))
-	gpFramebufferTextureMultiviewOVR = (C.GPFRAMEBUFFERTEXTUREMULTIVIEWOVR)(getProcAddr("glFramebufferTextureMultiviewOVR"))
-	gpFramebufferTextureOES = (C.GPFRAMEBUFFERTEXTUREOES)(getProcAddr("glFramebufferTextureOES"))
-	gpFrontFace = (C.GPFRONTFACE)(getProcAddr("glFrontFace"))
-	if gpFrontFace == nil {
-		return errors.New("glFrontFace")
-	}
-	gpGenBuffers = (C.GPGENBUFFERS)(getProcAddr("glGenBuffers"))
-	if gpGenBuffers == nil {
-		return errors.New("glGenBuffers")
-	}
-	gpGenFencesNV = (C.GPGENFENCESNV)(getProcAddr("glGenFencesNV"))
-	gpGenFramebuffers = (C.GPGENFRAMEBUFFERS)(getProcAddr("glGenFramebuffers"))
-	if gpGenFramebuffers == nil {
-		return errors.New("glGenFramebuffers")
-	}
-	gpGenPathsNV = (C.GPGENPATHSNV)(getProcAddr("glGenPathsNV"))
-	gpGenPerfMonitorsAMD = (C.GPGENPERFMONITORSAMD)(getProcAddr("glGenPerfMonitorsAMD"))
-	gpGenProgramPipelines = (C.GPGENPROGRAMPIPELINES)(getProcAddr("glGenProgramPipelines"))
-	if gpGenProgramPipelines == nil {
-		return errors.New("glGenProgramPipelines")
-	}
-	gpGenProgramPipelinesEXT = (C.GPGENPROGRAMPIPELINESEXT)(getProcAddr("glGenProgramPipelinesEXT"))
-	gpGenQueries = (C.GPGENQUERIES)(getProcAddr("glGenQueries"))
-	if gpGenQueries == nil {
-		return errors.New("glGenQueries")
-	}
-	gpGenQueriesEXT = (C.GPGENQUERIESEXT)(getProcAddr("glGenQueriesEXT"))
-	gpGenRenderbuffers = (C.GPGENRENDERBUFFERS)(getProcAddr("glGenRenderbuffers"))
-	if gpGenRenderbuffers == nil {
-		return errors.New("glGenRenderbuffers")
-	}
-	gpGenSamplers = (C.GPGENSAMPLERS)(getProcAddr("glGenSamplers"))
-	if gpGenSamplers == nil {
-		return errors.New("glGenSamplers")
-	}
-	gpGenSemaphoresEXT = (C.GPGENSEMAPHORESEXT)(getProcAddr("glGenSemaphoresEXT"))
-	gpGenTextures = (C.GPGENTEXTURES)(getProcAddr("glGenTextures"))
-	if gpGenTextures == nil {
-		return errors.New("glGenTextures")
-	}
-	gpGenTransformFeedbacks = (C.GPGENTRANSFORMFEEDBACKS)(getProcAddr("glGenTransformFeedbacks"))
-	if gpGenTransformFeedbacks == nil {
-		return errors.New("glGenTransformFeedbacks")
-	}
-	gpGenVertexArrays = (C.GPGENVERTEXARRAYS)(getProcAddr("glGenVertexArrays"))
-	if gpGenVertexArrays == nil {
-		return errors.New("glGenVertexArrays")
-	}
-	gpGenVertexArraysOES = (C.GPGENVERTEXARRAYSOES)(getProcAddr("glGenVertexArraysOES"))
-	gpGenerateMipmap = (C.GPGENERATEMIPMAP)(getProcAddr("glGenerateMipmap"))
-	if gpGenerateMipmap == nil {
-		return errors.New("glGenerateMipmap")
-	}
-	gpGetActiveAttrib = (C.GPGETACTIVEATTRIB)(getProcAddr("glGetActiveAttrib"))
-	if gpGetActiveAttrib == nil {
-		return errors.New("glGetActiveAttrib")
-	}
-	gpGetActiveUniform = (C.GPGETACTIVEUNIFORM)(getProcAddr("glGetActiveUniform"))
-	if gpGetActiveUniform == nil {
-		return errors.New("glGetActiveUniform")
-	}
-	gpGetActiveUniformBlockName = (C.GPGETACTIVEUNIFORMBLOCKNAME)(getProcAddr("glGetActiveUniformBlockName"))
-	if gpGetActiveUniformBlockName == nil {
-		return errors.New("glGetActiveUniformBlockName")
-	}
-	gpGetActiveUniformBlockiv = (C.GPGETACTIVEUNIFORMBLOCKIV)(getProcAddr("glGetActiveUniformBlockiv"))
-	if gpGetActiveUniformBlockiv == nil {
-		return errors.New("glGetActiveUniformBlockiv")
-	}
-	gpGetActiveUniformsiv = (C.GPGETACTIVEUNIFORMSIV)(getProcAddr("glGetActiveUniformsiv"))
-	if gpGetActiveUniformsiv == nil {
-		return errors.New("glGetActiveUniformsiv")
-	}
-	gpGetAttachedShaders = (C.GPGETATTACHEDSHADERS)(getProcAddr("glGetAttachedShaders"))
-	if gpGetAttachedShaders == nil {
-		return errors.New("glGetAttachedShaders")
-	}
-	gpGetAttribLocation = (C.GPGETATTRIBLOCATION)(getProcAddr("glGetAttribLocation"))
-	if gpGetAttribLocation == nil {
-		return errors.New("glGetAttribLocation")
-	}
-	gpGetBooleani_v = (C.GPGETBOOLEANI_V)(getProcAddr("glGetBooleani_v"))
-	if gpGetBooleani_v == nil {
-		return errors.New("glGetBooleani_v")
-	}
-	gpGetBooleanv = (C.GPGETBOOLEANV)(getProcAddr("glGetBooleanv"))
-	if gpGetBooleanv == nil {
-		return errors.New("glGetBooleanv")
-	}
-	gpGetBufferParameteri64v = (C.GPGETBUFFERPARAMETERI64V)(getProcAddr("glGetBufferParameteri64v"))
-	if gpGetBufferParameteri64v == nil {
-		return errors.New("glGetBufferParameteri64v")
-	}
-	gpGetBufferParameteriv = (C.GPGETBUFFERPARAMETERIV)(getProcAddr("glGetBufferParameteriv"))
-	if gpGetBufferParameteriv == nil {
-		return errors.New("glGetBufferParameteriv")
-	}
-	gpGetBufferPointerv = (C.GPGETBUFFERPOINTERV)(getProcAddr("glGetBufferPointerv"))
-	if gpGetBufferPointerv == nil {
-		return errors.New("glGetBufferPointerv")
-	}
-	gpGetBufferPointervOES = (C.GPGETBUFFERPOINTERVOES)(getProcAddr("glGetBufferPointervOES"))
-	gpGetCoverageModulationTableNV = (C.GPGETCOVERAGEMODULATIONTABLENV)(getProcAddr("glGetCoverageModulationTableNV"))
-	gpGetDebugMessageLog = (C.GPGETDEBUGMESSAGELOG)(getProcAddr("glGetDebugMessageLog"))
-	if gpGetDebugMessageLog == nil {
-		return errors.New("glGetDebugMessageLog")
-	}
-	gpGetDebugMessageLogKHR = (C.GPGETDEBUGMESSAGELOGKHR)(getProcAddr("glGetDebugMessageLogKHR"))
-	gpGetDriverControlStringQCOM = (C.GPGETDRIVERCONTROLSTRINGQCOM)(getProcAddr("glGetDriverControlStringQCOM"))
-	gpGetDriverControlsQCOM = (C.GPGETDRIVERCONTROLSQCOM)(getProcAddr("glGetDriverControlsQCOM"))
-	gpGetError = (C.GPGETERROR)(getProcAddr("glGetError"))
-	if gpGetError == nil {
-		return errors.New("glGetError")
-	}
-	gpGetFenceivNV = (C.GPGETFENCEIVNV)(getProcAddr("glGetFenceivNV"))
-	gpGetFirstPerfQueryIdINTEL = (C.GPGETFIRSTPERFQUERYIDINTEL)(getProcAddr("glGetFirstPerfQueryIdINTEL"))
-	gpGetFloati_vNV = (C.GPGETFLOATI_VNV)(getProcAddr("glGetFloati_vNV"))
-	gpGetFloati_vOES = (C.GPGETFLOATI_VOES)(getProcAddr("glGetFloati_vOES"))
-	gpGetFloatv = (C.GPGETFLOATV)(getProcAddr("glGetFloatv"))
-	if gpGetFloatv == nil {
-		return errors.New("glGetFloatv")
-	}
-	gpGetFragDataIndexEXT = (C.GPGETFRAGDATAINDEXEXT)(getProcAddr("glGetFragDataIndexEXT"))
-	gpGetFragDataLocation = (C.GPGETFRAGDATALOCATION)(getProcAddr("glGetFragDataLocation"))
-	if gpGetFragDataLocation == nil {
-		return errors.New("glGetFragDataLocation")
-	}
-	gpGetFragmentShadingRatesEXT = (C.GPGETFRAGMENTSHADINGRATESEXT)(getProcAddr("glGetFragmentShadingRatesEXT"))
-	gpGetFramebufferAttachmentParameteriv = (C.GPGETFRAMEBUFFERATTACHMENTPARAMETERIV)(getProcAddr("glGetFramebufferAttachmentParameteriv"))
-	if gpGetFramebufferAttachmentParameteriv == nil {
-		return errors.New("glGetFramebufferAttachmentParameteriv")
-	}
-	gpGetFramebufferParameteriv = (C.GPGETFRAMEBUFFERPARAMETERIV)(getProcAddr("glGetFramebufferParameteriv"))
-	if gpGetFramebufferParameteriv == nil {
-		return errors.New("glGetFramebufferParameteriv")
-	}
-	gpGetFramebufferParameterivMESA = (C.GPGETFRAMEBUFFERPARAMETERIVMESA)(getProcAddr("glGetFramebufferParameterivMESA"))
-	gpGetFramebufferPixelLocalStorageSizeEXT = (C.GPGETFRAMEBUFFERPIXELLOCALSTORAGESIZEEXT)(getProcAddr("glGetFramebufferPixelLocalStorageSizeEXT"))
-	gpGetGraphicsResetStatus = (C.GPGETGRAPHICSRESETSTATUS)(getProcAddr("glGetGraphicsResetStatus"))
-	if gpGetGraphicsResetStatus == nil {
-		return errors.New("glGetGraphicsResetStatus")
-	}
-	gpGetGraphicsResetStatusEXT = (C.GPGETGRAPHICSRESETSTATUSEXT)(getProcAddr("glGetGraphicsResetStatusEXT"))
-	gpGetGraphicsResetStatusKHR = (C.GPGETGRAPHICSRESETSTATUSKHR)(getProcAddr("glGetGraphicsResetStatusKHR"))
-	gpGetImageHandleNV = (C.GPGETIMAGEHANDLENV)(getProcAddr("glGetImageHandleNV"))
-	gpGetInteger64i_v = (C.GPGETINTEGER64I_V)(getProcAddr("glGetInteger64i_v"))
-	if gpGetInteger64i_v == nil {
-		return errors.New("glGetInteger64i_v")
-	}
-	gpGetInteger64v = (C.GPGETINTEGER64V)(getProcAddr("glGetInteger64v"))
-	if gpGetInteger64v == nil {
-		return errors.New("glGetInteger64v")
-	}
-	gpGetInteger64vAPPLE = (C.GPGETINTEGER64VAPPLE)(getProcAddr("glGetInteger64vAPPLE"))
-	gpGetInteger64vEXT = (C.GPGETINTEGER64VEXT)(getProcAddr("glGetInteger64vEXT"))
-	gpGetIntegeri_v = (C.GPGETINTEGERI_V)(getProcAddr("glGetIntegeri_v"))
-	if gpGetIntegeri_v == nil {
-		return errors.New("glGetIntegeri_v")
-	}
-	gpGetIntegeri_vEXT = (C.GPGETINTEGERI_VEXT)(getProcAddr("glGetIntegeri_vEXT"))
-	gpGetIntegerv = (C.GPGETINTEGERV)(getProcAddr("glGetIntegerv"))
-	if gpGetIntegerv == nil {
-		return errors.New("glGetIntegerv")
-	}
-	gpGetInternalformatSampleivNV = (C.GPGETINTERNALFORMATSAMPLEIVNV)(getProcAddr("glGetInternalformatSampleivNV"))
-	gpGetInternalformativ = (C.GPGETINTERNALFORMATIV)(getProcAddr("glGetInternalformativ"))
-	if gpGetInternalformativ == nil {
-		return errors.New("glGetInternalformativ")
-	}
-	gpGetMemoryObjectDetachedResourcesuivNV = (C.GPGETMEMORYOBJECTDETACHEDRESOURCESUIVNV)(getProcAddr("glGetMemoryObjectDetachedResourcesuivNV"))
-	gpGetMemoryObjectParameterivEXT = (C.GPGETMEMORYOBJECTPARAMETERIVEXT)(getProcAddr("glGetMemoryObjectParameterivEXT"))
-	gpGetMultisamplefv = (C.GPGETMULTISAMPLEFV)(getProcAddr("glGetMultisamplefv"))
-	if gpGetMultisamplefv == nil {
-		return errors.New("glGetMultisamplefv")
-	}
-	gpGetNextPerfQueryIdINTEL = (C.GPGETNEXTPERFQUERYIDINTEL)(getProcAddr("glGetNextPerfQueryIdINTEL"))
-	gpGetObjectLabel = (C.GPGETOBJECTLABEL)(getProcAddr("glGetObjectLabel"))
-	if gpGetObjectLabel == nil {
-		return errors.New("glGetObjectLabel")
-	}
-	gpGetObjectLabelEXT = (C.GPGETOBJECTLABELEXT)(getProcAddr("glGetObjectLabelEXT"))
-	gpGetObjectLabelKHR = (C.GPGETOBJECTLABELKHR)(getProcAddr("glGetObjectLabelKHR"))
-	gpGetObjectPtrLabel = (C.GPGETOBJECTPTRLABEL)(getProcAddr("glGetObjectPtrLabel"))
-	if gpGetObjectPtrLabel == nil {
-		return errors.New("glGetObjectPtrLabel")
-	}
-	gpGetObjectPtrLabelKHR = (C.GPGETOBJECTPTRLABELKHR)(getProcAddr("glGetObjectPtrLabelKHR"))
-	gpGetPathCommandsNV = (C.GPGETPATHCOMMANDSNV)(getProcAddr("glGetPathCommandsNV"))
-	gpGetPathCoordsNV = (C.GPGETPATHCOORDSNV)(getProcAddr("glGetPathCoordsNV"))
-	gpGetPathDashArrayNV = (C.GPGETPATHDASHARRAYNV)(getProcAddr("glGetPathDashArrayNV"))
-	gpGetPathLengthNV = (C.GPGETPATHLENGTHNV)(getProcAddr("glGetPathLengthNV"))
-	gpGetPathMetricRangeNV = (C.GPGETPATHMETRICRANGENV)(getProcAddr("glGetPathMetricRangeNV"))
-	gpGetPathMetricsNV = (C.GPGETPATHMETRICSNV)(getProcAddr("glGetPathMetricsNV"))
-	gpGetPathParameterfvNV = (C.GPGETPATHPARAMETERFVNV)(getProcAddr("glGetPathParameterfvNV"))
-	gpGetPathParameterivNV = (C.GPGETPATHPARAMETERIVNV)(getProcAddr("glGetPathParameterivNV"))
-	gpGetPathSpacingNV = (C.GPGETPATHSPACINGNV)(getProcAddr("glGetPathSpacingNV"))
-	gpGetPerfCounterInfoINTEL = (C.GPGETPERFCOUNTERINFOINTEL)(getProcAddr("glGetPerfCounterInfoINTEL"))
-	gpGetPerfMonitorCounterDataAMD = (C.GPGETPERFMONITORCOUNTERDATAAMD)(getProcAddr("glGetPerfMonitorCounterDataAMD"))
-	gpGetPerfMonitorCounterInfoAMD = (C.GPGETPERFMONITORCOUNTERINFOAMD)(getProcAddr("glGetPerfMonitorCounterInfoAMD"))
-	gpGetPerfMonitorCounterStringAMD = (C.GPGETPERFMONITORCOUNTERSTRINGAMD)(getProcAddr("glGetPerfMonitorCounterStringAMD"))
-	gpGetPerfMonitorCountersAMD = (C.GPGETPERFMONITORCOUNTERSAMD)(getProcAddr("glGetPerfMonitorCountersAMD"))
-	gpGetPerfMonitorGroupStringAMD = (C.GPGETPERFMONITORGROUPSTRINGAMD)(getProcAddr("glGetPerfMonitorGroupStringAMD"))
-	gpGetPerfMonitorGroupsAMD = (C.GPGETPERFMONITORGROUPSAMD)(getProcAddr("glGetPerfMonitorGroupsAMD"))
-	gpGetPerfQueryDataINTEL = (C.GPGETPERFQUERYDATAINTEL)(getProcAddr("glGetPerfQueryDataINTEL"))
-	gpGetPerfQueryIdByNameINTEL = (C.GPGETPERFQUERYIDBYNAMEINTEL)(getProcAddr("glGetPerfQueryIdByNameINTEL"))
-	gpGetPerfQueryInfoINTEL = (C.GPGETPERFQUERYINFOINTEL)(getProcAddr("glGetPerfQueryInfoINTEL"))
-	gpGetPointerv = (C.GPGETPOINTERV)(getProcAddr("glGetPointerv"))
-	if gpGetPointerv == nil {
-		return errors.New("glGetPointerv")
-	}
-	gpGetPointervKHR = (C.GPGETPOINTERVKHR)(getProcAddr("glGetPointervKHR"))
-	gpGetProgramBinary = (C.GPGETPROGRAMBINARY)(getProcAddr("glGetProgramBinary"))
-	if gpGetProgramBinary == nil {
-		return errors.New("glGetProgramBinary")
-	}
-	gpGetProgramBinaryOES = (C.GPGETPROGRAMBINARYOES)(getProcAddr("glGetProgramBinaryOES"))
-	gpGetProgramInfoLog = (C.GPGETPROGRAMINFOLOG)(getProcAddr("glGetProgramInfoLog"))
-	if gpGetProgramInfoLog == nil {
-		return errors.New("glGetProgramInfoLog")
-	}
-	gpGetProgramInterfaceiv = (C.GPGETPROGRAMINTERFACEIV)(getProcAddr("glGetProgramInterfaceiv"))
-	if gpGetProgramInterfaceiv == nil {
-		return errors.New("glGetProgramInterfaceiv")
-	}
-	gpGetProgramPipelineInfoLog = (C.GPGETPROGRAMPIPELINEINFOLOG)(getProcAddr("glGetProgramPipelineInfoLog"))
-	if gpGetProgramPipelineInfoLog == nil {
-		return errors.New("glGetProgramPipelineInfoLog")
-	}
-	gpGetProgramPipelineInfoLogEXT = (C.GPGETPROGRAMPIPELINEINFOLOGEXT)(getProcAddr("glGetProgramPipelineInfoLogEXT"))
-	gpGetProgramPipelineiv = (C.GPGETPROGRAMPIPELINEIV)(getProcAddr("glGetProgramPipelineiv"))
-	if gpGetProgramPipelineiv == nil {
-		return errors.New("glGetProgramPipelineiv")
-	}
-	gpGetProgramPipelineivEXT = (C.GPGETPROGRAMPIPELINEIVEXT)(getProcAddr("glGetProgramPipelineivEXT"))
-	gpGetProgramResourceIndex = (C.GPGETPROGRAMRESOURCEINDEX)(getProcAddr("glGetProgramResourceIndex"))
-	if gpGetProgramResourceIndex == nil {
-		return errors.New("glGetProgramResourceIndex")
-	}
-	gpGetProgramResourceLocation = (C.GPGETPROGRAMRESOURCELOCATION)(getProcAddr("glGetProgramResourceLocation"))
-	if gpGetProgramResourceLocation == nil {
-		return errors.New("glGetProgramResourceLocation")
-	}
-	gpGetProgramResourceLocationIndexEXT = (C.GPGETPROGRAMRESOURCELOCATIONINDEXEXT)(getProcAddr("glGetProgramResourceLocationIndexEXT"))
-	gpGetProgramResourceName = (C.GPGETPROGRAMRESOURCENAME)(getProcAddr("glGetProgramResourceName"))
-	if gpGetProgramResourceName == nil {
-		return errors.New("glGetProgramResourceName")
-	}
-	gpGetProgramResourcefvNV = (C.GPGETPROGRAMRESOURCEFVNV)(getProcAddr("glGetProgramResourcefvNV"))
-	gpGetProgramResourceiv = (C.GPGETPROGRAMRESOURCEIV)(getProcAddr("glGetProgramResourceiv"))
-	if gpGetProgramResourceiv == nil {
-		return errors.New("glGetProgramResourceiv")
-	}
-	gpGetProgramiv = (C.GPGETPROGRAMIV)(getProcAddr("glGetProgramiv"))
-	if gpGetProgramiv == nil {
-		return errors.New("glGetProgramiv")
-	}
-	gpGetQueryObjecti64vEXT = (C.GPGETQUERYOBJECTI64VEXT)(getProcAddr("glGetQueryObjecti64vEXT"))
-	gpGetQueryObjectivEXT = (C.GPGETQUERYOBJECTIVEXT)(getProcAddr("glGetQueryObjectivEXT"))
-	gpGetQueryObjectui64vEXT = (C.GPGETQUERYOBJECTUI64VEXT)(getProcAddr("glGetQueryObjectui64vEXT"))
-	gpGetQueryObjectuiv = (C.GPGETQUERYOBJECTUIV)(getProcAddr("glGetQueryObjectuiv"))
-	if gpGetQueryObjectuiv == nil {
-		return errors.New("glGetQueryObjectuiv")
-	}
-	gpGetQueryObjectuivEXT = (C.GPGETQUERYOBJECTUIVEXT)(getProcAddr("glGetQueryObjectuivEXT"))
-	gpGetQueryiv = (C.GPGETQUERYIV)(getProcAddr("glGetQueryiv"))
-	if gpGetQueryiv == nil {
-		return errors.New("glGetQueryiv")
-	}
-	gpGetQueryivEXT = (C.GPGETQUERYIVEXT)(getProcAddr("glGetQueryivEXT"))
-	gpGetRenderbufferParameteriv = (C.GPGETRENDERBUFFERPARAMETERIV)(getProcAddr("glGetRenderbufferParameteriv"))
-	if gpGetRenderbufferParameteriv == nil {
-		return errors.New("glGetRenderbufferParameteriv")
-	}
-	gpGetSamplerParameterIiv = (C.GPGETSAMPLERPARAMETERIIV)(getProcAddr("glGetSamplerParameterIiv"))
-	if gpGetSamplerParameterIiv == nil {
-		return errors.New("glGetSamplerParameterIiv")
-	}
-	gpGetSamplerParameterIivEXT = (C.GPGETSAMPLERPARAMETERIIVEXT)(getProcAddr("glGetSamplerParameterIivEXT"))
-	gpGetSamplerParameterIivOES = (C.GPGETSAMPLERPARAMETERIIVOES)(getProcAddr("glGetSamplerParameterIivOES"))
-	gpGetSamplerParameterIuiv = (C.GPGETSAMPLERPARAMETERIUIV)(getProcAddr("glGetSamplerParameterIuiv"))
-	if gpGetSamplerParameterIuiv == nil {
-		return errors.New("glGetSamplerParameterIuiv")
-	}
-	gpGetSamplerParameterIuivEXT = (C.GPGETSAMPLERPARAMETERIUIVEXT)(getProcAddr("glGetSamplerParameterIuivEXT"))
-	gpGetSamplerParameterIuivOES = (C.GPGETSAMPLERPARAMETERIUIVOES)(getProcAddr("glGetSamplerParameterIuivOES"))
-	gpGetSamplerParameterfv = (C.GPGETSAMPLERPARAMETERFV)(getProcAddr("glGetSamplerParameterfv"))
-	if gpGetSamplerParameterfv == nil {
-		return errors.New("glGetSamplerParameterfv")
-	}
-	gpGetSamplerParameteriv = (C.GPGETSAMPLERPARAMETERIV)(getProcAddr("glGetSamplerParameteriv"))
-	if gpGetSamplerParameteriv == nil {
-		return errors.New("glGetSamplerParameteriv")
-	}
-	gpGetSemaphoreParameterivNV = (C.GPGETSEMAPHOREPARAMETERIVNV)(getProcAddr("glGetSemaphoreParameterivNV"))
-	gpGetSemaphoreParameterui64vEXT = (C.GPGETSEMAPHOREPARAMETERUI64VEXT)(getProcAddr("glGetSemaphoreParameterui64vEXT"))
-	gpGetShaderInfoLog = (C.GPGETSHADERINFOLOG)(getProcAddr("glGetShaderInfoLog"))
-	if gpGetShaderInfoLog == nil {
-		return errors.New("glGetShaderInfoLog")
-	}
-	gpGetShaderPrecisionFormat = (C.GPGETSHADERPRECISIONFORMAT)(getProcAddr("glGetShaderPrecisionFormat"))
-	if gpGetShaderPrecisionFormat == nil {
-		return errors.New("glGetShaderPrecisionFormat")
-	}
-	gpGetShaderSource = (C.GPGETSHADERSOURCE)(getProcAddr("glGetShaderSource"))
-	if gpGetShaderSource == nil {
-		return errors.New("glGetShaderSource")
-	}
-	gpGetShaderiv = (C.GPGETSHADERIV)(getProcAddr("glGetShaderiv"))
-	if gpGetShaderiv == nil {
-		return errors.New("glGetShaderiv")
-	}
-	gpGetShadingRateImagePaletteNV = (C.GPGETSHADINGRATEIMAGEPALETTENV)(getProcAddr("glGetShadingRateImagePaletteNV"))
-	gpGetShadingRateSampleLocationivNV = (C.GPGETSHADINGRATESAMPLELOCATIONIVNV)(getProcAddr("glGetShadingRateSampleLocationivNV"))
-	gpGetString = (C.GPGETSTRING)(getProcAddr("glGetString"))
-	if gpGetString == nil {
-		return errors.New("glGetString")
-	}
-	gpGetStringi = (C.GPGETSTRINGI)(getProcAddr("glGetStringi"))
-	if gpGetStringi == nil {
-		return errors.New("glGetStringi")
-	}
-	gpGetSynciv = (C.GPGETSYNCIV)(getProcAddr("glGetSynciv"))
-	if gpGetSynciv == nil {
-		return errors.New("glGetSynciv")
-	}
-	gpGetSyncivAPPLE = (C.GPGETSYNCIVAPPLE)(getProcAddr("glGetSyncivAPPLE"))
-	gpGetTexLevelParameterfv = (C.GPGETTEXLEVELPARAMETERFV)(getProcAddr("glGetTexLevelParameterfv"))
-	if gpGetTexLevelParameterfv == nil {
-		return errors.New("glGetTexLevelParameterfv")
-	}
-	gpGetTexLevelParameteriv = (C.GPGETTEXLEVELPARAMETERIV)(getProcAddr("glGetTexLevelParameteriv"))
-	if gpGetTexLevelParameteriv == nil {
-		return errors.New("glGetTexLevelParameteriv")
-	}
-	gpGetTexParameterIiv = (C.GPGETTEXPARAMETERIIV)(getProcAddr("glGetTexParameterIiv"))
-	if gpGetTexParameterIiv == nil {
-		return errors.New("glGetTexParameterIiv")
-	}
-	gpGetTexParameterIivEXT = (C.GPGETTEXPARAMETERIIVEXT)(getProcAddr("glGetTexParameterIivEXT"))
-	gpGetTexParameterIivOES = (C.GPGETTEXPARAMETERIIVOES)(getProcAddr("glGetTexParameterIivOES"))
-	gpGetTexParameterIuiv = (C.GPGETTEXPARAMETERIUIV)(getProcAddr("glGetTexParameterIuiv"))
-	if gpGetTexParameterIuiv == nil {
-		return errors.New("glGetTexParameterIuiv")
-	}
-	gpGetTexParameterIuivEXT = (C.GPGETTEXPARAMETERIUIVEXT)(getProcAddr("glGetTexParameterIuivEXT"))
-	gpGetTexParameterIuivOES = (C.GPGETTEXPARAMETERIUIVOES)(getProcAddr("glGetTexParameterIuivOES"))
-	gpGetTexParameterfv = (C.GPGETTEXPARAMETERFV)(getProcAddr("glGetTexParameterfv"))
-	if gpGetTexParameterfv == nil {
-		return errors.New("glGetTexParameterfv")
-	}
-	gpGetTexParameteriv = (C.GPGETTEXPARAMETERIV)(getProcAddr("glGetTexParameteriv"))
-	if gpGetTexParameteriv == nil {
-		return errors.New("glGetTexParameteriv")
-	}
-	gpGetTextureHandleIMG = (C.GPGETTEXTUREHANDLEIMG)(getProcAddr("glGetTextureHandleIMG"))
-	gpGetTextureHandleNV = (C.GPGETTEXTUREHANDLENV)(getProcAddr("glGetTextureHandleNV"))
-	gpGetTextureSamplerHandleIMG = (C.GPGETTEXTURESAMPLERHANDLEIMG)(getProcAddr("glGetTextureSamplerHandleIMG"))
-	gpGetTextureSamplerHandleNV = (C.GPGETTEXTURESAMPLERHANDLENV)(getProcAddr("glGetTextureSamplerHandleNV"))
-	gpGetTransformFeedbackVarying = (C.GPGETTRANSFORMFEEDBACKVARYING)(getProcAddr("glGetTransformFeedbackVarying"))
-	if gpGetTransformFeedbackVarying == nil {
-		return errors.New("glGetTransformFeedbackVarying")
-	}
-	gpGetTranslatedShaderSourceANGLE = (C.GPGETTRANSLATEDSHADERSOURCEANGLE)(getProcAddr("glGetTranslatedShaderSourceANGLE"))
-	gpGetUniformBlockIndex = (C.GPGETUNIFORMBLOCKINDEX)(getProcAddr("glGetUniformBlockIndex"))
-	if gpGetUniformBlockIndex == nil {
-		return errors.New("glGetUniformBlockIndex")
-	}
-	gpGetUniformIndices = (C.GPGETUNIFORMINDICES)(getProcAddr("glGetUniformIndices"))
-	if gpGetUniformIndices == nil {
-		return errors.New("glGetUniformIndices")
-	}
-	gpGetUniformLocation = (C.GPGETUNIFORMLOCATION)(getProcAddr("glGetUniformLocation"))
-	if gpGetUniformLocation == nil {
-		return errors.New("glGetUniformLocation")
-	}
-	gpGetUniformfv = (C.GPGETUNIFORMFV)(getProcAddr("glGetUniformfv"))
-	if gpGetUniformfv == nil {
-		return errors.New("glGetUniformfv")
-	}
-	gpGetUniformi64vNV = (C.GPGETUNIFORMI64VNV)(getProcAddr("glGetUniformi64vNV"))
-	gpGetUniformiv = (C.GPGETUNIFORMIV)(getProcAddr("glGetUniformiv"))
-	if gpGetUniformiv == nil {
-		return errors.New("glGetUniformiv")
-	}
-	gpGetUniformuiv = (C.GPGETUNIFORMUIV)(getProcAddr("glGetUniformuiv"))
-	if gpGetUniformuiv == nil {
-		return errors.New("glGetUniformuiv")
-	}
-	gpGetUnsignedBytei_vEXT = (C.GPGETUNSIGNEDBYTEI_VEXT)(getProcAddr("glGetUnsignedBytei_vEXT"))
-	gpGetUnsignedBytevEXT = (C.GPGETUNSIGNEDBYTEVEXT)(getProcAddr("glGetUnsignedBytevEXT"))
-	gpGetVertexAttribIiv = (C.GPGETVERTEXATTRIBIIV)(getProcAddr("glGetVertexAttribIiv"))
-	if gpGetVertexAttribIiv == nil {
-		return errors.New("glGetVertexAttribIiv")
-	}
-	gpGetVertexAttribIuiv = (C.GPGETVERTEXATTRIBIUIV)(getProcAddr("glGetVertexAttribIuiv"))
-	if gpGetVertexAttribIuiv == nil {
-		return errors.New("glGetVertexAttribIuiv")
-	}
-	gpGetVertexAttribPointerv = (C.GPGETVERTEXATTRIBPOINTERV)(getProcAddr("glGetVertexAttribPointerv"))
-	if gpGetVertexAttribPointerv == nil {
-		return errors.New("glGetVertexAttribPointerv")
-	}
-	gpGetVertexAttribfv = (C.GPGETVERTEXATTRIBFV)(getProcAddr("glGetVertexAttribfv"))
-	if gpGetVertexAttribfv == nil {
-		return errors.New("glGetVertexAttribfv")
-	}
-	gpGetVertexAttribiv = (C.GPGETVERTEXATTRIBIV)(getProcAddr("glGetVertexAttribiv"))
-	if gpGetVertexAttribiv == nil {
-		return errors.New("glGetVertexAttribiv")
-	}
-	gpGetVkProcAddrNV = (C.GPGETVKPROCADDRNV)(getProcAddr("glGetVkProcAddrNV"))
-	gpGetnUniformfv = (C.GPGETNUNIFORMFV)(getProcAddr("glGetnUniformfv"))
-	if gpGetnUniformfv == nil {
-		return errors.New("glGetnUniformfv")
-	}
-	gpGetnUniformfvEXT = (C.GPGETNUNIFORMFVEXT)(getProcAddr("glGetnUniformfvEXT"))
-	gpGetnUniformfvKHR = (C.GPGETNUNIFORMFVKHR)(getProcAddr("glGetnUniformfvKHR"))
-	gpGetnUniformiv = (C.GPGETNUNIFORMIV)(getProcAddr("glGetnUniformiv"))
-	if gpGetnUniformiv == nil {
-		return errors.New("glGetnUniformiv")
-	}
-	gpGetnUniformivEXT = (C.GPGETNUNIFORMIVEXT)(getProcAddr("glGetnUniformivEXT"))
-	gpGetnUniformivKHR = (C.GPGETNUNIFORMIVKHR)(getProcAddr("glGetnUniformivKHR"))
-	gpGetnUniformuiv = (C.GPGETNUNIFORMUIV)(getProcAddr("glGetnUniformuiv"))
-	if gpGetnUniformuiv == nil {
-		return errors.New("glGetnUniformuiv")
-	}
-	gpGetnUniformuivKHR = (C.GPGETNUNIFORMUIVKHR)(getProcAddr("glGetnUniformuivKHR"))
-	gpHint = (C.GPHINT)(getProcAddr("glHint"))
-	if gpHint == nil {
-		return errors.New("glHint")
-	}
-	gpImportMemoryFdEXT = (C.GPIMPORTMEMORYFDEXT)(getProcAddr("glImportMemoryFdEXT"))
-	gpImportMemoryWin32HandleEXT = (C.GPIMPORTMEMORYWIN32HANDLEEXT)(getProcAddr("glImportMemoryWin32HandleEXT"))
-	gpImportMemoryWin32NameEXT = (C.GPIMPORTMEMORYWIN32NAMEEXT)(getProcAddr("glImportMemoryWin32NameEXT"))
-	gpImportSemaphoreFdEXT = (C.GPIMPORTSEMAPHOREFDEXT)(getProcAddr("glImportSemaphoreFdEXT"))
-	gpImportSemaphoreWin32HandleEXT = (C.GPIMPORTSEMAPHOREWIN32HANDLEEXT)(getProcAddr("glImportSemaphoreWin32HandleEXT"))
-	gpImportSemaphoreWin32NameEXT = (C.GPIMPORTSEMAPHOREWIN32NAMEEXT)(getProcAddr("glImportSemaphoreWin32NameEXT"))
-	gpInsertEventMarkerEXT = (C.GPINSERTEVENTMARKEREXT)(getProcAddr("glInsertEventMarkerEXT"))
-	gpInterpolatePathsNV = (C.GPINTERPOLATEPATHSNV)(getProcAddr("glInterpolatePathsNV"))
-	gpInvalidateFramebuffer = (C.GPINVALIDATEFRAMEBUFFER)(getProcAddr("glInvalidateFramebuffer"))
-	if gpInvalidateFramebuffer == nil {
-		return errors.New("glInvalidateFramebuffer")
-	}
-	gpInvalidateSubFramebuffer = (C.GPINVALIDATESUBFRAMEBUFFER)(getProcAddr("glInvalidateSubFramebuffer"))
-	if gpInvalidateSubFramebuffer == nil {
-		return errors.New("glInvalidateSubFramebuffer")
-	}
-	gpIsBuffer = (C.GPISBUFFER)(getProcAddr("glIsBuffer"))
-	if gpIsBuffer == nil {
-		return errors.New("glIsBuffer")
-	}
-	gpIsEnabled = (C.GPISENABLED)(getProcAddr("glIsEnabled"))
-	if gpIsEnabled == nil {
-		return errors.New("glIsEnabled")
-	}
-	gpIsEnabledi = (C.GPISENABLEDI)(getProcAddr("glIsEnabledi"))
-	if gpIsEnabledi == nil {
-		return errors.New("glIsEnabledi")
-	}
-	gpIsEnablediEXT = (C.GPISENABLEDIEXT)(getProcAddr("glIsEnablediEXT"))
-	gpIsEnablediNV = (C.GPISENABLEDINV)(getProcAddr("glIsEnablediNV"))
-	gpIsEnablediOES = (C.GPISENABLEDIOES)(getProcAddr("glIsEnablediOES"))
-	gpIsFenceNV = (C.GPISFENCENV)(getProcAddr("glIsFenceNV"))
-	gpIsFramebuffer = (C.GPISFRAMEBUFFER)(getProcAddr("glIsFramebuffer"))
-	if gpIsFramebuffer == nil {
-		return errors.New("glIsFramebuffer")
-	}
-	gpIsImageHandleResidentNV = (C.GPISIMAGEHANDLERESIDENTNV)(getProcAddr("glIsImageHandleResidentNV"))
-	gpIsMemoryObjectEXT = (C.GPISMEMORYOBJECTEXT)(getProcAddr("glIsMemoryObjectEXT"))
-	gpIsPathNV = (C.GPISPATHNV)(getProcAddr("glIsPathNV"))
-	gpIsPointInFillPathNV = (C.GPISPOINTINFILLPATHNV)(getProcAddr("glIsPointInFillPathNV"))
-	gpIsPointInStrokePathNV = (C.GPISPOINTINSTROKEPATHNV)(getProcAddr("glIsPointInStrokePathNV"))
-	gpIsProgram = (C.GPISPROGRAM)(getProcAddr("glIsProgram"))
-	if gpIsProgram == nil {
-		return errors.New("glIsProgram")
-	}
-	gpIsProgramPipeline = (C.GPISPROGRAMPIPELINE)(getProcAddr("glIsProgramPipeline"))
-	if gpIsProgramPipeline == nil {
-		return errors.New("glIsProgramPipeline")
-	}
-	gpIsProgramPipelineEXT = (C.GPISPROGRAMPIPELINEEXT)(getProcAddr("glIsProgramPipelineEXT"))
-	gpIsQuery = (C.GPISQUERY)(getProcAddr("glIsQuery"))
-	if gpIsQuery == nil {
-		return errors.New("glIsQuery")
-	}
-	gpIsQueryEXT = (C.GPISQUERYEXT)(getProcAddr("glIsQueryEXT"))
-	gpIsRenderbuffer = (C.GPISRENDERBUFFER)(getProcAddr("glIsRenderbuffer"))
-	if gpIsRenderbuffer == nil {
-		return errors.New("glIsRenderbuffer")
-	}
-	gpIsSampler = (C.GPISSAMPLER)(getProcAddr("glIsSampler"))
-	if gpIsSampler == nil {
-		return errors.New("glIsSampler")
-	}
-	gpIsSemaphoreEXT = (C.GPISSEMAPHOREEXT)(getProcAddr("glIsSemaphoreEXT"))
-	gpIsShader = (C.GPISSHADER)(getProcAddr("glIsShader"))
-	if gpIsShader == nil {
-		return errors.New("glIsShader")
-	}
-	gpIsSync = (C.GPISSYNC)(getProcAddr("glIsSync"))
-	if gpIsSync == nil {
-		return errors.New("glIsSync")
-	}
-	gpIsSyncAPPLE = (C.GPISSYNCAPPLE)(getProcAddr("glIsSyncAPPLE"))
-	gpIsTexture = (C.GPISTEXTURE)(getProcAddr("glIsTexture"))
-	if gpIsTexture == nil {
-		return errors.New("glIsTexture")
-	}
-	gpIsTextureHandleResidentNV = (C.GPISTEXTUREHANDLERESIDENTNV)(getProcAddr("glIsTextureHandleResidentNV"))
-	gpIsTransformFeedback = (C.GPISTRANSFORMFEEDBACK)(getProcAddr("glIsTransformFeedback"))
-	if gpIsTransformFeedback == nil {
-		return errors.New("glIsTransformFeedback")
-	}
-	gpIsVertexArray = (C.GPISVERTEXARRAY)(getProcAddr("glIsVertexArray"))
-	if gpIsVertexArray == nil {
-		return errors.New("glIsVertexArray")
-	}
-	gpIsVertexArrayOES = (C.GPISVERTEXARRAYOES)(getProcAddr("glIsVertexArrayOES"))
-	gpLabelObjectEXT = (C.GPLABELOBJECTEXT)(getProcAddr("glLabelObjectEXT"))
-	gpLineWidth = (C.GPLINEWIDTH)(getProcAddr("glLineWidth"))
-	if gpLineWidth == nil {
-		return errors.New("glLineWidth")
-	}
-	gpLinkProgram = (C.GPLINKPROGRAM)(getProcAddr("glLinkProgram"))
-	if gpLinkProgram == nil {
-		return errors.New("glLinkProgram")
-	}
-	gpMakeImageHandleNonResidentNV = (C.GPMAKEIMAGEHANDLENONRESIDENTNV)(getProcAddr("glMakeImageHandleNonResidentNV"))
-	gpMakeImageHandleResidentNV = (C.GPMAKEIMAGEHANDLERESIDENTNV)(getProcAddr("glMakeImageHandleResidentNV"))
-	gpMakeTextureHandleNonResidentNV = (C.GPMAKETEXTUREHANDLENONRESIDENTNV)(getProcAddr("glMakeTextureHandleNonResidentNV"))
-	gpMakeTextureHandleResidentNV = (C.GPMAKETEXTUREHANDLERESIDENTNV)(getProcAddr("glMakeTextureHandleResidentNV"))
-	gpMapBufferOES = (C.GPMAPBUFFEROES)(getProcAddr("glMapBufferOES"))
-	gpMapBufferRange = (C.GPMAPBUFFERRANGE)(getProcAddr("glMapBufferRange"))
-	if gpMapBufferRange == nil {
-		return errors.New("glMapBufferRange")
-	}
-	gpMapBufferRangeEXT = (C.GPMAPBUFFERRANGEEXT)(getProcAddr("glMapBufferRangeEXT"))
-	gpMatrixFrustumEXT = (C.GPMATRIXFRUSTUMEXT)(getProcAddr("glMatrixFrustumEXT"))
-	gpMatrixLoad3x2fNV = (C.GPMATRIXLOAD3X2FNV)(getProcAddr("glMatrixLoad3x2fNV"))
-	gpMatrixLoad3x3fNV = (C.GPMATRIXLOAD3X3FNV)(getProcAddr("glMatrixLoad3x3fNV"))
-	gpMatrixLoadIdentityEXT = (C.GPMATRIXLOADIDENTITYEXT)(getProcAddr("glMatrixLoadIdentityEXT"))
-	gpMatrixLoadTranspose3x3fNV = (C.GPMATRIXLOADTRANSPOSE3X3FNV)(getProcAddr("glMatrixLoadTranspose3x3fNV"))
-	gpMatrixLoadTransposedEXT = (C.GPMATRIXLOADTRANSPOSEDEXT)(getProcAddr("glMatrixLoadTransposedEXT"))
-	gpMatrixLoadTransposefEXT = (C.GPMATRIXLOADTRANSPOSEFEXT)(getProcAddr("glMatrixLoadTransposefEXT"))
-	gpMatrixLoaddEXT = (C.GPMATRIXLOADDEXT)(getProcAddr("glMatrixLoaddEXT"))
-	gpMatrixLoadfEXT = (C.GPMATRIXLOADFEXT)(getProcAddr("glMatrixLoadfEXT"))
-	gpMatrixMult3x2fNV = (C.GPMATRIXMULT3X2FNV)(getProcAddr("glMatrixMult3x2fNV"))
-	gpMatrixMult3x3fNV = (C.GPMATRIXMULT3X3FNV)(getProcAddr("glMatrixMult3x3fNV"))
-	gpMatrixMultTranspose3x3fNV = (C.GPMATRIXMULTTRANSPOSE3X3FNV)(getProcAddr("glMatrixMultTranspose3x3fNV"))
-	gpMatrixMultTransposedEXT = (C.GPMATRIXMULTTRANSPOSEDEXT)(getProcAddr("glMatrixMultTransposedEXT"))
-	gpMatrixMultTransposefEXT = (C.GPMATRIXMULTTRANSPOSEFEXT)(getProcAddr("glMatrixMultTransposefEXT"))
-	gpMatrixMultdEXT = (C.GPMATRIXMULTDEXT)(getProcAddr("glMatrixMultdEXT"))
-	gpMatrixMultfEXT = (C.GPMATRIXMULTFEXT)(getProcAddr("glMatrixMultfEXT"))
-	gpMatrixOrthoEXT = (C.GPMATRIXORTHOEXT)(getProcAddr("glMatrixOrthoEXT"))
-	gpMatrixPopEXT = (C.GPMATRIXPOPEXT)(getProcAddr("glMatrixPopEXT"))
-	gpMatrixPushEXT = (C.GPMATRIXPUSHEXT)(getProcAddr("glMatrixPushEXT"))
-	gpMatrixRotatedEXT = (C.GPMATRIXROTATEDEXT)(getProcAddr("glMatrixRotatedEXT"))
-	gpMatrixRotatefEXT = (C.GPMATRIXROTATEFEXT)(getProcAddr("glMatrixRotatefEXT"))
-	gpMatrixScaledEXT = (C.GPMATRIXSCALEDEXT)(getProcAddr("glMatrixScaledEXT"))
-	gpMatrixScalefEXT = (C.GPMATRIXSCALEFEXT)(getProcAddr("glMatrixScalefEXT"))
-	gpMatrixTranslatedEXT = (C.GPMATRIXTRANSLATEDEXT)(getProcAddr("glMatrixTranslatedEXT"))
-	gpMatrixTranslatefEXT = (C.GPMATRIXTRANSLATEFEXT)(getProcAddr("glMatrixTranslatefEXT"))
-	gpMaxActiveShaderCoresARM = (C.GPMAXACTIVESHADERCORESARM)(getProcAddr("glMaxActiveShaderCoresARM"))
-	gpMaxShaderCompilerThreadsKHR = (C.GPMAXSHADERCOMPILERTHREADSKHR)(getProcAddr("glMaxShaderCompilerThreadsKHR"))
-	gpMemoryBarrier = (C.GPMEMORYBARRIER)(getProcAddr("glMemoryBarrier"))
-	if gpMemoryBarrier == nil {
-		return errors.New("glMemoryBarrier")
-	}
-	gpMemoryBarrierByRegion = (C.GPMEMORYBARRIERBYREGION)(getProcAddr("glMemoryBarrierByRegion"))
-	if gpMemoryBarrierByRegion == nil {
-		return errors.New("glMemoryBarrierByRegion")
-	}
-	gpMemoryObjectParameterivEXT = (C.GPMEMORYOBJECTPARAMETERIVEXT)(getProcAddr("glMemoryObjectParameterivEXT"))
-	gpMinSampleShading = (C.GPMINSAMPLESHADING)(getProcAddr("glMinSampleShading"))
-	if gpMinSampleShading == nil {
-		return errors.New("glMinSampleShading")
-	}
-	gpMinSampleShadingOES = (C.GPMINSAMPLESHADINGOES)(getProcAddr("glMinSampleShadingOES"))
-	gpMultiDrawArraysEXT = (C.GPMULTIDRAWARRAYSEXT)(getProcAddr("glMultiDrawArraysEXT"))
-	gpMultiDrawArraysIndirectEXT = (C.GPMULTIDRAWARRAYSINDIRECTEXT)(getProcAddr("glMultiDrawArraysIndirectEXT"))
-	gpMultiDrawElementsBaseVertexEXT = (C.GPMULTIDRAWELEMENTSBASEVERTEXEXT)(getProcAddr("glMultiDrawElementsBaseVertexEXT"))
-	gpMultiDrawElementsEXT = (C.GPMULTIDRAWELEMENTSEXT)(getProcAddr("glMultiDrawElementsEXT"))
-	gpMultiDrawElementsIndirectEXT = (C.GPMULTIDRAWELEMENTSINDIRECTEXT)(getProcAddr("glMultiDrawElementsIndirectEXT"))
-	gpMultiDrawMeshTasksIndirectCountEXT = (C.GPMULTIDRAWMESHTASKSINDIRECTCOUNTEXT)(getProcAddr("glMultiDrawMeshTasksIndirectCountEXT"))
-	gpMultiDrawMeshTasksIndirectCountNV = (C.GPMULTIDRAWMESHTASKSINDIRECTCOUNTNV)(getProcAddr("glMultiDrawMeshTasksIndirectCountNV"))
-	gpMultiDrawMeshTasksIndirectEXT = (C.GPMULTIDRAWMESHTASKSINDIRECTEXT)(getProcAddr("glMultiDrawMeshTasksIndirectEXT"))
-	gpMultiDrawMeshTasksIndirectNV = (C.GPMULTIDRAWMESHTASKSINDIRECTNV)(getProcAddr("glMultiDrawMeshTasksIndirectNV"))
-	gpNamedBufferAttachMemoryNV = (C.GPNAMEDBUFFERATTACHMEMORYNV)(getProcAddr("glNamedBufferAttachMemoryNV"))
-	gpNamedBufferPageCommitmentMemNV = (C.GPNAMEDBUFFERPAGECOMMITMENTMEMNV)(getProcAddr("glNamedBufferPageCommitmentMemNV"))
-	gpNamedBufferStorageExternalEXT = (C.GPNAMEDBUFFERSTORAGEEXTERNALEXT)(getProcAddr("glNamedBufferStorageExternalEXT"))
-	gpNamedBufferStorageMemEXT = (C.GPNAMEDBUFFERSTORAGEMEMEXT)(getProcAddr("glNamedBufferStorageMemEXT"))
-	gpNamedFramebufferSampleLocationsfvNV = (C.GPNAMEDFRAMEBUFFERSAMPLELOCATIONSFVNV)(getProcAddr("glNamedFramebufferSampleLocationsfvNV"))
-	gpNamedFramebufferTextureMultiviewOVR = (C.GPNAMEDFRAMEBUFFERTEXTUREMULTIVIEWOVR)(getProcAddr("glNamedFramebufferTextureMultiviewOVR"))
-	gpNamedRenderbufferStorageMultisampleAdvancedAMD = (C.GPNAMEDRENDERBUFFERSTORAGEMULTISAMPLEADVANCEDAMD)(getProcAddr("glNamedRenderbufferStorageMultisampleAdvancedAMD"))
-	gpObjectLabel = (C.GPOBJECTLABEL)(getProcAddr("glObjectLabel"))
-	if gpObjectLabel == nil {
-		return errors.New("glObjectLabel")
-	}
-	gpObjectLabelKHR = (C.GPOBJECTLABELKHR)(getProcAddr("glObjectLabelKHR"))
-	gpObjectPtrLabel = (C.GPOBJECTPTRLABEL)(getProcAddr("glObjectPtrLabel"))
-	if gpObjectPtrLabel == nil {
-		return errors.New("glObjectPtrLabel")
-	}
-	gpObjectPtrLabelKHR = (C.GPOBJECTPTRLABELKHR)(getProcAddr("glObjectPtrLabelKHR"))
-	gpPatchParameteri = (C.GPPATCHPARAMETERI)(getProcAddr("glPatchParameteri"))
-	if gpPatchParameteri == nil {
-		return errors.New("glPatchParameteri")
-	}
-	gpPatchParameteriEXT = (C.GPPATCHPARAMETERIEXT)(getProcAddr("glPatchParameteriEXT"))
-	gpPatchParameteriOES = (C.GPPATCHPARAMETERIOES)(getProcAddr("glPatchParameteriOES"))
-	gpPathCommandsNV = (C.GPPATHCOMMANDSNV)(getProcAddr("glPathCommandsNV"))
-	gpPathCoordsNV = (C.GPPATHCOORDSNV)(getProcAddr("glPathCoordsNV"))
-	gpPathCoverDepthFuncNV = (C.GPPATHCOVERDEPTHFUNCNV)(getProcAddr("glPathCoverDepthFuncNV"))
-	gpPathDashArrayNV = (C.GPPATHDASHARRAYNV)(getProcAddr("glPathDashArrayNV"))
-	gpPathGlyphIndexArrayNV = (C.GPPATHGLYPHINDEXARRAYNV)(getProcAddr("glPathGlyphIndexArrayNV"))
-	gpPathGlyphIndexRangeNV = (C.GPPATHGLYPHINDEXRANGENV)(getProcAddr("glPathGlyphIndexRangeNV"))
-	gpPathGlyphRangeNV = (C.GPPATHGLYPHRANGENV)(getProcAddr("glPathGlyphRangeNV"))
-	gpPathGlyphsNV = (C.GPPATHGLYPHSNV)(getProcAddr("glPathGlyphsNV"))
-	gpPathMemoryGlyphIndexArrayNV = (C.GPPATHMEMORYGLYPHINDEXARRAYNV)(getProcAddr("glPathMemoryGlyphIndexArrayNV"))
-	gpPathParameterfNV = (C.GPPATHPARAMETERFNV)(getProcAddr("glPathParameterfNV"))
-	gpPathParameterfvNV = (C.GPPATHPARAMETERFVNV)(getProcAddr("glPathParameterfvNV"))
-	gpPathParameteriNV = (C.GPPATHPARAMETERINV)(getProcAddr("glPathParameteriNV"))
-	gpPathParameterivNV = (C.GPPATHPARAMETERIVNV)(getProcAddr("glPathParameterivNV"))
-	gpPathStencilDepthOffsetNV = (C.GPPATHSTENCILDEPTHOFFSETNV)(getProcAddr("glPathStencilDepthOffsetNV"))
-	gpPathStencilFuncNV = (C.GPPATHSTENCILFUNCNV)(getProcAddr("glPathStencilFuncNV"))
-	gpPathStringNV = (C.GPPATHSTRINGNV)(getProcAddr("glPathStringNV"))
-	gpPathSubCommandsNV = (C.GPPATHSUBCOMMANDSNV)(getProcAddr("glPathSubCommandsNV"))
-	gpPathSubCoordsNV = (C.GPPATHSUBCOORDSNV)(getProcAddr("glPathSubCoordsNV"))
-	gpPauseTransformFeedback = (C.GPPAUSETRANSFORMFEEDBACK)(getProcAddr("glPauseTransformFeedback"))
-	if gpPauseTransformFeedback == nil {
-		return errors.New("glPauseTransformFeedback")
-	}
-	gpPixelStorei = (C.GPPIXELSTOREI)(getProcAddr("glPixelStorei"))
-	if gpPixelStorei == nil {
-		return errors.New("glPixelStorei")
-	}
-	gpPointAlongPathNV = (C.GPPOINTALONGPATHNV)(getProcAddr("glPointAlongPathNV"))
-	gpPolygonModeNV = (C.GPPOLYGONMODENV)(getProcAddr("glPolygonModeNV"))
-	gpPolygonOffset = (C.GPPOLYGONOFFSET)(getProcAddr("glPolygonOffset"))
-	if gpPolygonOffset == nil {
-		return errors.New("glPolygonOffset")
-	}
-	gpPolygonOffsetClampEXT = (C.GPPOLYGONOFFSETCLAMPEXT)(getProcAddr("glPolygonOffsetClampEXT"))
-	gpPopDebugGroup = (C.GPPOPDEBUGGROUP)(getProcAddr("glPopDebugGroup"))
-	if gpPopDebugGroup == nil {
-		return errors.New("glPopDebugGroup")
-	}
-	gpPopDebugGroupKHR = (C.GPPOPDEBUGGROUPKHR)(getProcAddr("glPopDebugGroupKHR"))
-	gpPopGroupMarkerEXT = (C.GPPOPGROUPMARKEREXT)(getProcAddr("glPopGroupMarkerEXT"))
-	gpPrimitiveBoundingBox = (C.GPPRIMITIVEBOUNDINGBOX)(getProcAddr("glPrimitiveBoundingBox"))
-	if gpPrimitiveBoundingBox == nil {
-		return errors.New("glPrimitiveBoundingBox")
-	}
-	gpPrimitiveBoundingBoxEXT = (C.GPPRIMITIVEBOUNDINGBOXEXT)(getProcAddr("glPrimitiveBoundingBoxEXT"))
-	gpPrimitiveBoundingBoxOES = (C.GPPRIMITIVEBOUNDINGBOXOES)(getProcAddr("glPrimitiveBoundingBoxOES"))
-	gpProgramBinary = (C.GPPROGRAMBINARY)(getProcAddr("glProgramBinary"))
-	if gpProgramBinary == nil {
-		return errors.New("glProgramBinary")
-	}
-	gpProgramBinaryOES = (C.GPPROGRAMBINARYOES)(getProcAddr("glProgramBinaryOES"))
-	gpProgramParameteri = (C.GPPROGRAMPARAMETERI)(getProcAddr("glProgramParameteri"))
-	if gpProgramParameteri == nil {
-		return errors.New("glProgramParameteri")
-	}
-	gpProgramParameteriEXT = (C.GPPROGRAMPARAMETERIEXT)(getProcAddr("glProgramParameteriEXT"))
-	gpProgramPathFragmentInputGenNV = (C.GPPROGRAMPATHFRAGMENTINPUTGENNV)(getProcAddr("glProgramPathFragmentInputGenNV"))
-	gpProgramUniform1f = (C.GPPROGRAMUNIFORM1F)(getProcAddr("glProgramUniform1f"))
-	if gpProgramUniform1f == nil {
-		return errors.New("glProgramUniform1f")
-	}
-	gpProgramUniform1fEXT = (C.GPPROGRAMUNIFORM1FEXT)(getProcAddr("glProgramUniform1fEXT"))
-	gpProgramUniform1fv = (C.GPPROGRAMUNIFORM1FV)(getProcAddr("glProgramUniform1fv"))
-	if gpProgramUniform1fv == nil {
-		return errors.New("glProgramUniform1fv")
-	}
-	gpProgramUniform1fvEXT = (C.GPPROGRAMUNIFORM1FVEXT)(getProcAddr("glProgramUniform1fvEXT"))
-	gpProgramUniform1i = (C.GPPROGRAMUNIFORM1I)(getProcAddr("glProgramUniform1i"))
-	if gpProgramUniform1i == nil {
-		return errors.New("glProgramUniform1i")
-	}
-	gpProgramUniform1i64NV = (C.GPPROGRAMUNIFORM1I64NV)(getProcAddr("glProgramUniform1i64NV"))
-	gpProgramUniform1i64vNV = (C.GPPROGRAMUNIFORM1I64VNV)(getProcAddr("glProgramUniform1i64vNV"))
-	gpProgramUniform1iEXT = (C.GPPROGRAMUNIFORM1IEXT)(getProcAddr("glProgramUniform1iEXT"))
-	gpProgramUniform1iv = (C.GPPROGRAMUNIFORM1IV)(getProcAddr("glProgramUniform1iv"))
-	if gpProgramUniform1iv == nil {
-		return errors.New("glProgramUniform1iv")
-	}
-	gpProgramUniform1ivEXT = (C.GPPROGRAMUNIFORM1IVEXT)(getProcAddr("glProgramUniform1ivEXT"))
-	gpProgramUniform1ui = (C.GPPROGRAMUNIFORM1UI)(getProcAddr("glProgramUniform1ui"))
-	if gpProgramUniform1ui == nil {
-		return errors.New("glProgramUniform1ui")
-	}
-	gpProgramUniform1ui64NV = (C.GPPROGRAMUNIFORM1UI64NV)(getProcAddr("glProgramUniform1ui64NV"))
-	gpProgramUniform1ui64vNV = (C.GPPROGRAMUNIFORM1UI64VNV)(getProcAddr("glProgramUniform1ui64vNV"))
-	gpProgramUniform1uiEXT = (C.GPPROGRAMUNIFORM1UIEXT)(getProcAddr("glProgramUniform1uiEXT"))
-	gpProgramUniform1uiv = (C.GPPROGRAMUNIFORM1UIV)(getProcAddr("glProgramUniform1uiv"))
-	if gpProgramUniform1uiv == nil {
-		return errors.New("glProgramUniform1uiv")
-	}
-	gpProgramUniform1uivEXT = (C.GPPROGRAMUNIFORM1UIVEXT)(getProcAddr("glProgramUniform1uivEXT"))
-	gpProgramUniform2f = (C.GPPROGRAMUNIFORM2F)(getProcAddr("glProgramUniform2f"))
-	if gpProgramUniform2f == nil {
-		return errors.New("glProgramUniform2f")
-	}
-	gpProgramUniform2fEXT = (C.GPPROGRAMUNIFORM2FEXT)(getProcAddr("glProgramUniform2fEXT"))
-	gpProgramUniform2fv = (C.GPPROGRAMUNIFORM2FV)(getProcAddr("glProgramUniform2fv"))
-	if gpProgramUniform2fv == nil {
-		return errors.New("glProgramUniform2fv")
-	}
-	gpProgramUniform2fvEXT = (C.GPPROGRAMUNIFORM2FVEXT)(getProcAddr("glProgramUniform2fvEXT"))
-	gpProgramUniform2i = (C.GPPROGRAMUNIFORM2I)(getProcAddr("glProgramUniform2i"))
-	if gpProgramUniform2i == nil {
-		return errors.New("glProgramUniform2i")
-	}
-	gpProgramUniform2i64NV = (C.GPPROGRAMUNIFORM2I64NV)(getProcAddr("glProgramUniform2i64NV"))
-	gpProgramUniform2i64vNV = (C.GPPROGRAMUNIFORM2I64VNV)(getProcAddr("glProgramUniform2i64vNV"))
-	gpProgramUniform2iEXT = (C.GPPROGRAMUNIFORM2IEXT)(getProcAddr("glProgramUniform2iEXT"))
-	gpProgramUniform2iv = (C.GPPROGRAMUNIFORM2IV)(getProcAddr("glProgramUniform2iv"))
-	if gpProgramUniform2iv == nil {
-		return errors.New("glProgramUniform2iv")
-	}
-	gpProgramUniform2ivEXT = (C.GPPROGRAMUNIFORM2IVEXT)(getProcAddr("glProgramUniform2ivEXT"))
-	gpProgramUniform2ui = (C.GPPROGRAMUNIFORM2UI)(getProcAddr("glProgramUniform2ui"))
-	if gpProgramUniform2ui == nil {
-		return errors.New("glProgramUniform2ui")
-	}
-	gpProgramUniform2ui64NV = (C.GPPROGRAMUNIFORM2UI64NV)(getProcAddr("glProgramUniform2ui64NV"))
-	gpProgramUniform2ui64vNV = (C.GPPROGRAMUNIFORM2UI64VNV)(getProcAddr("glProgramUniform2ui64vNV"))
-	gpProgramUniform2uiEXT = (C.GPPROGRAMUNIFORM2UIEXT)(getProcAddr("glProgramUniform2uiEXT"))
-	gpProgramUniform2uiv = (C.GPPROGRAMUNIFORM2UIV)(getProcAddr("glProgramUniform2uiv"))
-	if gpProgramUniform2uiv == nil {
-		return errors.New("glProgramUniform2uiv")
-	}
-	gpProgramUniform2uivEXT = (C.GPPROGRAMUNIFORM2UIVEXT)(getProcAddr("glProgramUniform2uivEXT"))
-	gpProgramUniform3f = (C.GPPROGRAMUNIFORM3F)(getProcAddr("glProgramUniform3f"))
-	if gpProgramUniform3f == nil {
-		return errors.New("glProgramUniform3f")
-	}
-	gpProgramUniform3fEXT = (C.GPPROGRAMUNIFORM3FEXT)(getProcAddr("glProgramUniform3fEXT"))
-	gpProgramUniform3fv = (C.GPPROGRAMUNIFORM3FV)(getProcAddr("glProgramUniform3fv"))
-	if gpProgramUniform3fv == nil {
-		return errors.New("glProgramUniform3fv")
-	}
-	gpProgramUniform3fvEXT = (C.GPPROGRAMUNIFORM3FVEXT)(getProcAddr("glProgramUniform3fvEXT"))
-	gpProgramUniform3i = (C.GPPROGRAMUNIFORM3I)(getProcAddr("glProgramUniform3i"))
-	if gpProgramUniform3i == nil {
-		return errors.New("glProgramUniform3i")
-	}
-	gpProgramUniform3i64NV = (C.GPPROGRAMUNIFORM3I64NV)(getProcAddr("glProgramUniform3i64NV"))
-	gpProgramUniform3i64vNV = (C.GPPROGRAMUNIFORM3I64VNV)(getProcAddr("glProgramUniform3i64vNV"))
-	gpProgramUniform3iEXT = (C.GPPROGRAMUNIFORM3IEXT)(getProcAddr("glProgramUniform3iEXT"))
-	gpProgramUniform3iv = (C.GPPROGRAMUNIFORM3IV)(getProcAddr("glProgramUniform3iv"))
-	if gpProgramUniform3iv == nil {
-		return errors.New("glProgramUniform3iv")
-	}
-	gpProgramUniform3ivEXT = (C.GPPROGRAMUNIFORM3IVEXT)(getProcAddr("glProgramUniform3ivEXT"))
-	gpProgramUniform3ui = (C.GPPROGRAMUNIFORM3UI)(getProcAddr("glProgramUniform3ui"))
-	if gpProgramUniform3ui == nil {
-		return errors.New("glProgramUniform3ui")
-	}
-	gpProgramUniform3ui64NV = (C.GPPROGRAMUNIFORM3UI64NV)(getProcAddr("glProgramUniform3ui64NV"))
-	gpProgramUniform3ui64vNV = (C.GPPROGRAMUNIFORM3UI64VNV)(getProcAddr("glProgramUniform3ui64vNV"))
-	gpProgramUniform3uiEXT = (C.GPPROGRAMUNIFORM3UIEXT)(getProcAddr("glProgramUniform3uiEXT"))
-	gpProgramUniform3uiv = (C.GPPROGRAMUNIFORM3UIV)(getProcAddr("glProgramUniform3uiv"))
-	if gpProgramUniform3uiv == nil {
-		return errors.New("glProgramUniform3uiv")
-	}
-	gpProgramUniform3uivEXT = (C.GPPROGRAMUNIFORM3UIVEXT)(getProcAddr("glProgramUniform3uivEXT"))
-	gpProgramUniform4f = (C.GPPROGRAMUNIFORM4F)(getProcAddr("glProgramUniform4f"))
-	if gpProgramUniform4f == nil {
-		return errors.New("glProgramUniform4f")
-	}
-	gpProgramUniform4fEXT = (C.GPPROGRAMUNIFORM4FEXT)(getProcAddr("glProgramUniform4fEXT"))
-	gpProgramUniform4fv = (C.GPPROGRAMUNIFORM4FV)(getProcAddr("glProgramUniform4fv"))
-	if gpProgramUniform4fv == nil {
-		return errors.New("glProgramUniform4fv")
-	}
-	gpProgramUniform4fvEXT = (C.GPPROGRAMUNIFORM4FVEXT)(getProcAddr("glProgramUniform4fvEXT"))
-	gpProgramUniform4i = (C.GPPROGRAMUNIFORM4I)(getProcAddr("glProgramUniform4i"))
-	if gpProgramUniform4i == nil {
-		return errors.New("glProgramUniform4i")
-	}
-	gpProgramUniform4i64NV = (C.GPPROGRAMUNIFORM4I64NV)(getProcAddr("glProgramUniform4i64NV"))
-	gpProgramUniform4i64vNV = (C.GPPROGRAMUNIFORM4I64VNV)(getProcAddr("glProgramUniform4i64vNV"))
-	gpProgramUniform4iEXT = (C.GPPROGRAMUNIFORM4IEXT)(getProcAddr("glProgramUniform4iEXT"))
-	gpProgramUniform4iv = (C.GPPROGRAMUNIFORM4IV)(getProcAddr("glProgramUniform4iv"))
-	if gpProgramUniform4iv == nil {
-		return errors.New("glProgramUniform4iv")
-	}
-	gpProgramUniform4ivEXT = (C.GPPROGRAMUNIFORM4IVEXT)(getProcAddr("glProgramUniform4ivEXT"))
-	gpProgramUniform4ui = (C.GPPROGRAMUNIFORM4UI)(getProcAddr("glProgramUniform4ui"))
-	if gpProgramUniform4ui == nil {
-		return errors.New("glProgramUniform4ui")
-	}
-	gpProgramUniform4ui64NV = (C.GPPROGRAMUNIFORM4UI64NV)(getProcAddr("glProgramUniform4ui64NV"))
-	gpProgramUniform4ui64vNV = (C.GPPROGRAMUNIFORM4UI64VNV)(getProcAddr("glProgramUniform4ui64vNV"))
-	gpProgramUniform4uiEXT = (C.GPPROGRAMUNIFORM4UIEXT)(getProcAddr("glProgramUniform4uiEXT"))
-	gpProgramUniform4uiv = (C.GPPROGRAMUNIFORM4UIV)(getProcAddr("glProgramUniform4uiv"))
-	if gpProgramUniform4uiv == nil {
-		return errors.New("glProgramUniform4uiv")
-	}
-	gpProgramUniform4uivEXT = (C.GPPROGRAMUNIFORM4UIVEXT)(getProcAddr("glProgramUniform4uivEXT"))
-	gpProgramUniformHandleui64IMG = (C.GPPROGRAMUNIFORMHANDLEUI64IMG)(getProcAddr("glProgramUniformHandleui64IMG"))
-	gpProgramUniformHandleui64NV = (C.GPPROGRAMUNIFORMHANDLEUI64NV)(getProcAddr("glProgramUniformHandleui64NV"))
-	gpProgramUniformHandleui64vIMG = (C.GPPROGRAMUNIFORMHANDLEUI64VIMG)(getProcAddr("glProgramUniformHandleui64vIMG"))
-	gpProgramUniformHandleui64vNV = (C.GPPROGRAMUNIFORMHANDLEUI64VNV)(getProcAddr("glProgramUniformHandleui64vNV"))
-	gpProgramUniformMatrix2fv = (C.GPPROGRAMUNIFORMMATRIX2FV)(getProcAddr("glProgramUniformMatrix2fv"))
-	if gpProgramUniformMatrix2fv == nil {
-		return errors.New("glProgramUniformMatrix2fv")
-	}
-	gpProgramUniformMatrix2fvEXT = (C.GPPROGRAMUNIFORMMATRIX2FVEXT)(getProcAddr("glProgramUniformMatrix2fvEXT"))
-	gpProgramUniformMatrix2x3fv = (C.GPPROGRAMUNIFORMMATRIX2X3FV)(getProcAddr("glProgramUniformMatrix2x3fv"))
-	if gpProgramUniformMatrix2x3fv == nil {
-		return errors.New("glProgramUniformMatrix2x3fv")
-	}
-	gpProgramUniformMatrix2x3fvEXT = (C.GPPROGRAMUNIFORMMATRIX2X3FVEXT)(getProcAddr("glProgramUniformMatrix2x3fvEXT"))
-	gpProgramUniformMatrix2x4fv = (C.GPPROGRAMUNIFORMMATRIX2X4FV)(getProcAddr("glProgramUniformMatrix2x4fv"))
-	if gpProgramUniformMatrix2x4fv == nil {
-		return errors.New("glProgramUniformMatrix2x4fv")
-	}
-	gpProgramUniformMatrix2x4fvEXT = (C.GPPROGRAMUNIFORMMATRIX2X4FVEXT)(getProcAddr("glProgramUniformMatrix2x4fvEXT"))
-	gpProgramUniformMatrix3fv = (C.GPPROGRAMUNIFORMMATRIX3FV)(getProcAddr("glProgramUniformMatrix3fv"))
-	if gpProgramUniformMatrix3fv == nil {
-		return errors.New("glProgramUniformMatrix3fv")
-	}
-	gpProgramUniformMatrix3fvEXT = (C.GPPROGRAMUNIFORMMATRIX3FVEXT)(getProcAddr("glProgramUniformMatrix3fvEXT"))
-	gpProgramUniformMatrix3x2fv = (C.GPPROGRAMUNIFORMMATRIX3X2FV)(getProcAddr("glProgramUniformMatrix3x2fv"))
-	if gpProgramUniformMatrix3x2fv == nil {
-		return errors.New("glProgramUniformMatrix3x2fv")
-	}
-	gpProgramUniformMatrix3x2fvEXT = (C.GPPROGRAMUNIFORMMATRIX3X2FVEXT)(getProcAddr("glProgramUniformMatrix3x2fvEXT"))
-	gpProgramUniformMatrix3x4fv = (C.GPPROGRAMUNIFORMMATRIX3X4FV)(getProcAddr("glProgramUniformMatrix3x4fv"))
-	if gpProgramUniformMatrix3x4fv == nil {
-		return errors.New("glProgramUniformMatrix3x4fv")
-	}
-	gpProgramUniformMatrix3x4fvEXT = (C.GPPROGRAMUNIFORMMATRIX3X4FVEXT)(getProcAddr("glProgramUniformMatrix3x4fvEXT"))
-	gpProgramUniformMatrix4fv = (C.GPPROGRAMUNIFORMMATRIX4FV)(getProcAddr("glProgramUniformMatrix4fv"))
-	if gpProgramUniformMatrix4fv == nil {
-		return errors.New("glProgramUniformMatrix4fv")
-	}
-	gpProgramUniformMatrix4fvEXT = (C.GPPROGRAMUNIFORMMATRIX4FVEXT)(getProcAddr("glProgramUniformMatrix4fvEXT"))
-	gpProgramUniformMatrix4x2fv = (C.GPPROGRAMUNIFORMMATRIX4X2FV)(getProcAddr("glProgramUniformMatrix4x2fv"))
-	if gpProgramUniformMatrix4x2fv == nil {
-		return errors.New("glProgramUniformMatrix4x2fv")
-	}
-	gpProgramUniformMatrix4x2fvEXT = (C.GPPROGRAMUNIFORMMATRIX4X2FVEXT)(getProcAddr("glProgramUniformMatrix4x2fvEXT"))
-	gpProgramUniformMatrix4x3fv = (C.GPPROGRAMUNIFORMMATRIX4X3FV)(getProcAddr("glProgramUniformMatrix4x3fv"))
-	if gpProgramUniformMatrix4x3fv == nil {
-		return errors.New("glProgramUniformMatrix4x3fv")
-	}
-	gpProgramUniformMatrix4x3fvEXT = (C.GPPROGRAMUNIFORMMATRIX4X3FVEXT)(getProcAddr("glProgramUniformMatrix4x3fvEXT"))
-	gpPushDebugGroup = (C.GPPUSHDEBUGGROUP)(getProcAddr("glPushDebugGroup"))
-	if gpPushDebugGroup == nil {
-		return errors.New("glPushDebugGroup")
-	}
-	gpPushDebugGroupKHR = (C.GPPUSHDEBUGGROUPKHR)(getProcAddr("glPushDebugGroupKHR"))
-	gpPushGroupMarkerEXT = (C.GPPUSHGROUPMARKEREXT)(getProcAddr("glPushGroupMarkerEXT"))
-	gpQueryCounterEXT = (C.GPQUERYCOUNTEREXT)(getProcAddr("glQueryCounterEXT"))
-	gpRasterSamplesEXT = (C.GPRASTERSAMPLESEXT)(getProcAddr("glRasterSamplesEXT"))
-	gpReadBuffer = (C.GPREADBUFFER)(getProcAddr("glReadBuffer"))
-	if gpReadBuffer == nil {
-		return errors.New("glReadBuffer")
-	}
-	gpReadBufferIndexedEXT = (C.GPREADBUFFERINDEXEDEXT)(getProcAddr("glReadBufferIndexedEXT"))
-	gpReadBufferNV = (C.GPREADBUFFERNV)(getProcAddr("glReadBufferNV"))
-	gpReadPixels = (C.GPREADPIXELS)(getProcAddr("glReadPixels"))
-	if gpReadPixels == nil {
-		return errors.New("glReadPixels")
-	}
-	gpReadnPixels = (C.GPREADNPIXELS)(getProcAddr("glReadnPixels"))
-	if gpReadnPixels == nil {
-		return errors.New("glReadnPixels")
-	}
-	gpReadnPixelsEXT = (C.GPREADNPIXELSEXT)(getProcAddr("glReadnPixelsEXT"))
-	gpReadnPixelsKHR = (C.GPREADNPIXELSKHR)(getProcAddr("glReadnPixelsKHR"))
-	gpReleaseKeyedMutexWin32EXT = (C.GPRELEASEKEYEDMUTEXWIN32EXT)(getProcAddr("glReleaseKeyedMutexWin32EXT"))
-	gpReleaseShaderCompiler = (C.GPRELEASESHADERCOMPILER)(getProcAddr("glReleaseShaderCompiler"))
-	if gpReleaseShaderCompiler == nil {
-		return errors.New("glReleaseShaderCompiler")
-	}
-	gpRenderbufferStorage = (C.GPRENDERBUFFERSTORAGE)(getProcAddr("glRenderbufferStorage"))
-	if gpRenderbufferStorage == nil {
-		return errors.New("glRenderbufferStorage")
-	}
-	gpRenderbufferStorageMultisample = (C.GPRENDERBUFFERSTORAGEMULTISAMPLE)(getProcAddr("glRenderbufferStorageMultisample"))
-	if gpRenderbufferStorageMultisample == nil {
-		return errors.New("glRenderbufferStorageMultisample")
-	}
-	gpRenderbufferStorageMultisampleANGLE = (C.GPRENDERBUFFERSTORAGEMULTISAMPLEANGLE)(getProcAddr("glRenderbufferStorageMultisampleANGLE"))
-	gpRenderbufferStorageMultisampleAPPLE = (C.GPRENDERBUFFERSTORAGEMULTISAMPLEAPPLE)(getProcAddr("glRenderbufferStorageMultisampleAPPLE"))
-	gpRenderbufferStorageMultisampleAdvancedAMD = (C.GPRENDERBUFFERSTORAGEMULTISAMPLEADVANCEDAMD)(getProcAddr("glRenderbufferStorageMultisampleAdvancedAMD"))
-	gpRenderbufferStorageMultisampleEXT = (C.GPRENDERBUFFERSTORAGEMULTISAMPLEEXT)(getProcAddr("glRenderbufferStorageMultisampleEXT"))
-	gpRenderbufferStorageMultisampleIMG = (C.GPRENDERBUFFERSTORAGEMULTISAMPLEIMG)(getProcAddr("glRenderbufferStorageMultisampleIMG"))
-	gpRenderbufferStorageMultisampleNV = (C.GPRENDERBUFFERSTORAGEMULTISAMPLENV)(getProcAddr("glRenderbufferStorageMultisampleNV"))
-	gpResetMemoryObjectParameterNV = (C.GPRESETMEMORYOBJECTPARAMETERNV)(getProcAddr("glResetMemoryObjectParameterNV"))
-	gpResolveDepthValuesNV = (C.GPRESOLVEDEPTHVALUESNV)(getProcAddr("glResolveDepthValuesNV"))
-	gpResolveMultisampleFramebufferAPPLE = (C.GPRESOLVEMULTISAMPLEFRAMEBUFFERAPPLE)(getProcAddr("glResolveMultisampleFramebufferAPPLE"))
-	gpResumeTransformFeedback = (C.GPRESUMETRANSFORMFEEDBACK)(getProcAddr("glResumeTransformFeedback"))
-	if gpResumeTransformFeedback == nil {
-		return errors.New("glResumeTransformFeedback")
-	}
-	gpSampleCoverage = (C.GPSAMPLECOVERAGE)(getProcAddr("glSampleCoverage"))
-	if gpSampleCoverage == nil {
-		return errors.New("glSampleCoverage")
-	}
-	gpSampleMaski = (C.GPSAMPLEMASKI)(getProcAddr("glSampleMaski"))
-	if gpSampleMaski == nil {
-		return errors.New("glSampleMaski")
-	}
-	gpSamplerParameterIiv = (C.GPSAMPLERPARAMETERIIV)(getProcAddr("glSamplerParameterIiv"))
-	if gpSamplerParameterIiv == nil {
-		return errors.New("glSamplerParameterIiv")
-	}
-	gpSamplerParameterIivEXT = (C.GPSAMPLERPARAMETERIIVEXT)(getProcAddr("glSamplerParameterIivEXT"))
-	gpSamplerParameterIivOES = (C.GPSAMPLERPARAMETERIIVOES)(getProcAddr("glSamplerParameterIivOES"))
-	gpSamplerParameterIuiv = (C.GPSAMPLERPARAMETERIUIV)(getProcAddr("glSamplerParameterIuiv"))
-	if gpSamplerParameterIuiv == nil {
-		return errors.New("glSamplerParameterIuiv")
-	}
-	gpSamplerParameterIuivEXT = (C.GPSAMPLERPARAMETERIUIVEXT)(getProcAddr("glSamplerParameterIuivEXT"))
-	gpSamplerParameterIuivOES = (C.GPSAMPLERPARAMETERIUIVOES)(getProcAddr("glSamplerParameterIuivOES"))
-	gpSamplerParameterf = (C.GPSAMPLERPARAMETERF)(getProcAddr("glSamplerParameterf"))
-	if gpSamplerParameterf == nil {
-		return errors.New("glSamplerParameterf")
-	}
-	gpSamplerParameterfv = (C.GPSAMPLERPARAMETERFV)(getProcAddr("glSamplerParameterfv"))
-	if gpSamplerParameterfv == nil {
-		return errors.New("glSamplerParameterfv")
-	}
-	gpSamplerParameteri = (C.GPSAMPLERPARAMETERI)(getProcAddr("glSamplerParameteri"))
-	if gpSamplerParameteri == nil {
-		return errors.New("glSamplerParameteri")
-	}
-	gpSamplerParameteriv = (C.GPSAMPLERPARAMETERIV)(getProcAddr("glSamplerParameteriv"))
-	if gpSamplerParameteriv == nil {
-		return errors.New("glSamplerParameteriv")
-	}
-	gpScissor = (C.GPSCISSOR)(getProcAddr("glScissor"))
-	if gpScissor == nil {
-		return errors.New("glScissor")
-	}
-	gpScissorArrayvNV = (C.GPSCISSORARRAYVNV)(getProcAddr("glScissorArrayvNV"))
-	gpScissorArrayvOES = (C.GPSCISSORARRAYVOES)(getProcAddr("glScissorArrayvOES"))
-	gpScissorExclusiveArrayvNV = (C.GPSCISSOREXCLUSIVEARRAYVNV)(getProcAddr("glScissorExclusiveArrayvNV"))
-	gpScissorExclusiveNV = (C.GPSCISSOREXCLUSIVENV)(getProcAddr("glScissorExclusiveNV"))
-	gpScissorIndexedNV = (C.GPSCISSORINDEXEDNV)(getProcAddr("glScissorIndexedNV"))
-	gpScissorIndexedOES = (C.GPSCISSORINDEXEDOES)(getProcAddr("glScissorIndexedOES"))
-	gpScissorIndexedvNV = (C.GPSCISSORINDEXEDVNV)(getProcAddr("glScissorIndexedvNV"))
-	gpScissorIndexedvOES = (C.GPSCISSORINDEXEDVOES)(getProcAddr("glScissorIndexedvOES"))
-	gpSelectPerfMonitorCountersAMD = (C.GPSELECTPERFMONITORCOUNTERSAMD)(getProcAddr("glSelectPerfMonitorCountersAMD"))
-	gpSemaphoreParameterivNV = (C.GPSEMAPHOREPARAMETERIVNV)(getProcAddr("glSemaphoreParameterivNV"))
-	gpSemaphoreParameterui64vEXT = (C.GPSEMAPHOREPARAMETERUI64VEXT)(getProcAddr("glSemaphoreParameterui64vEXT"))
-	gpSetFenceNV = (C.GPSETFENCENV)(getProcAddr("glSetFenceNV"))
-	gpShaderBinary = (C.GPSHADERBINARY)(getProcAddr("glShaderBinary"))
-	if gpShaderBinary == nil {
-		return errors.New("glShaderBinary")
-	}
-	gpShaderSource = (C.GPSHADERSOURCE)(getProcAddr("glShaderSource"))
-	if gpShaderSource == nil {
-		return errors.New("glShaderSource")
-	}
-	gpShadingRateCombinerOpsEXT = (C.GPSHADINGRATECOMBINEROPSEXT)(getProcAddr("glShadingRateCombinerOpsEXT"))
-	gpShadingRateEXT = (C.GPSHADINGRATEEXT)(getProcAddr("glShadingRateEXT"))
-	gpShadingRateImageBarrierNV = (C.GPSHADINGRATEIMAGEBARRIERNV)(getProcAddr("glShadingRateImageBarrierNV"))
-	gpShadingRateImagePaletteNV = (C.GPSHADINGRATEIMAGEPALETTENV)(getProcAddr("glShadingRateImagePaletteNV"))
-	gpShadingRateQCOM = (C.GPSHADINGRATEQCOM)(getProcAddr("glShadingRateQCOM"))
-	gpShadingRateSampleOrderCustomNV = (C.GPSHADINGRATESAMPLEORDERCUSTOMNV)(getProcAddr("glShadingRateSampleOrderCustomNV"))
-	gpShadingRateSampleOrderNV = (C.GPSHADINGRATESAMPLEORDERNV)(getProcAddr("glShadingRateSampleOrderNV"))
-	gpSignalSemaphoreEXT = (C.GPSIGNALSEMAPHOREEXT)(getProcAddr("glSignalSemaphoreEXT"))
-	gpSignalVkFenceNV = (C.GPSIGNALVKFENCENV)(getProcAddr("glSignalVkFenceNV"))
-	gpSignalVkSemaphoreNV = (C.GPSIGNALVKSEMAPHORENV)(getProcAddr("glSignalVkSemaphoreNV"))
-	gpStartTilingQCOM = (C.GPSTARTTILINGQCOM)(getProcAddr("glStartTilingQCOM"))
-	gpStencilFillPathInstancedNV = (C.GPSTENCILFILLPATHINSTANCEDNV)(getProcAddr("glStencilFillPathInstancedNV"))
-	gpStencilFillPathNV = (C.GPSTENCILFILLPATHNV)(getProcAddr("glStencilFillPathNV"))
-	gpStencilFunc = (C.GPSTENCILFUNC)(getProcAddr("glStencilFunc"))
-	if gpStencilFunc == nil {
-		return errors.New("glStencilFunc")
-	}
-	gpStencilFuncSeparate = (C.GPSTENCILFUNCSEPARATE)(getProcAddr("glStencilFuncSeparate"))
-	if gpStencilFuncSeparate == nil {
-		return errors.New("glStencilFuncSeparate")
-	}
-	gpStencilMask = (C.GPSTENCILMASK)(getProcAddr("glStencilMask"))
-	if gpStencilMask == nil {
-		return errors.New("glStencilMask")
-	}
-	gpStencilMaskSeparate = (C.GPSTENCILMASKSEPARATE)(getProcAddr("glStencilMaskSeparate"))
-	if gpStencilMaskSeparate == nil {
-		return errors.New("glStencilMaskSeparate")
-	}
-	gpStencilOp = (C.GPSTENCILOP)(getProcAddr("glStencilOp"))
-	if gpStencilOp == nil {
-		return errors.New("glStencilOp")
-	}
-	gpStencilOpSeparate = (C.GPSTENCILOPSEPARATE)(getProcAddr("glStencilOpSeparate"))
-	if gpStencilOpSeparate == nil {
-		return errors.New("glStencilOpSeparate")
-	}
-	gpStencilStrokePathInstancedNV = (C.GPSTENCILSTROKEPATHINSTANCEDNV)(getProcAddr("glStencilStrokePathInstancedNV"))
-	gpStencilStrokePathNV = (C.GPSTENCILSTROKEPATHNV)(getProcAddr("glStencilStrokePathNV"))
-	gpStencilThenCoverFillPathInstancedNV = (C.GPSTENCILTHENCOVERFILLPATHINSTANCEDNV)(getProcAddr("glStencilThenCoverFillPathInstancedNV"))
-	gpStencilThenCoverFillPathNV = (C.GPSTENCILTHENCOVERFILLPATHNV)(getProcAddr("glStencilThenCoverFillPathNV"))
-	gpStencilThenCoverStrokePathInstancedNV = (C.GPSTENCILTHENCOVERSTROKEPATHINSTANCEDNV)(getProcAddr("glStencilThenCoverStrokePathInstancedNV"))
-	gpStencilThenCoverStrokePathNV = (C.GPSTENCILTHENCOVERSTROKEPATHNV)(getProcAddr("glStencilThenCoverStrokePathNV"))
-	gpSubpixelPrecisionBiasNV = (C.GPSUBPIXELPRECISIONBIASNV)(getProcAddr("glSubpixelPrecisionBiasNV"))
-	gpTestFenceNV = (C.GPTESTFENCENV)(getProcAddr("glTestFenceNV"))
-	gpTexAttachMemoryNV = (C.GPTEXATTACHMEMORYNV)(getProcAddr("glTexAttachMemoryNV"))
-	gpTexBuffer = (C.GPTEXBUFFER)(getProcAddr("glTexBuffer"))
-	if gpTexBuffer == nil {
-		return errors.New("glTexBuffer")
-	}
-	gpTexBufferEXT = (C.GPTEXBUFFEREXT)(getProcAddr("glTexBufferEXT"))
-	gpTexBufferOES = (C.GPTEXBUFFEROES)(getProcAddr("glTexBufferOES"))
-	gpTexBufferRange = (C.GPTEXBUFFERRANGE)(getProcAddr("glTexBufferRange"))
-	if gpTexBufferRange == nil {
-		return errors.New("glTexBufferRange")
-	}
-	gpTexBufferRangeEXT = (C.GPTEXBUFFERRANGEEXT)(getProcAddr("glTexBufferRangeEXT"))
-	gpTexBufferRangeOES = (C.GPTEXBUFFERRANGEOES)(getProcAddr("glTexBufferRangeOES"))
-	gpTexEstimateMotionQCOM = (C.GPTEXESTIMATEMOTIONQCOM)(getProcAddr("glTexEstimateMotionQCOM"))
-	gpTexEstimateMotionRegionsQCOM = (C.GPTEXESTIMATEMOTIONREGIONSQCOM)(getProcAddr("glTexEstimateMotionRegionsQCOM"))
-	gpTexImage2D = (C.GPTEXIMAGE2D)(getProcAddr("glTexImage2D"))
-	if gpTexImage2D == nil {
-		return errors.New("glTexImage2D")
-	}
-	gpTexImage3D = (C.GPTEXIMAGE3D)(getProcAddr("glTexImage3D"))
-	if gpTexImage3D == nil {
-		return errors.New("glTexImage3D")
-	}
-	gpTexImage3DOES = (C.GPTEXIMAGE3DOES)(getProcAddr("glTexImage3DOES"))
-	gpTexPageCommitmentEXT = (C.GPTEXPAGECOMMITMENTEXT)(getProcAddr("glTexPageCommitmentEXT"))
-	gpTexPageCommitmentMemNV = (C.GPTEXPAGECOMMITMENTMEMNV)(getProcAddr("glTexPageCommitmentMemNV"))
-	gpTexParameterIiv = (C.GPTEXPARAMETERIIV)(getProcAddr("glTexParameterIiv"))
-	if gpTexParameterIiv == nil {
-		return errors.New("glTexParameterIiv")
-	}
-	gpTexParameterIivEXT = (C.GPTEXPARAMETERIIVEXT)(getProcAddr("glTexParameterIivEXT"))
-	gpTexParameterIivOES = (C.GPTEXPARAMETERIIVOES)(getProcAddr("glTexParameterIivOES"))
-	gpTexParameterIuiv = (C.GPTEXPARAMETERIUIV)(getProcAddr("glTexParameterIuiv"))
-	if gpTexParameterIuiv == nil {
-		return errors.New("glTexParameterIuiv")
-	}
-	gpTexParameterIuivEXT = (C.GPTEXPARAMETERIUIVEXT)(getProcAddr("glTexParameterIuivEXT"))
-	gpTexParameterIuivOES = (C.GPTEXPARAMETERIUIVOES)(getProcAddr("glTexParameterIuivOES"))
-	gpTexParameterf = (C.GPTEXPARAMETERF)(getProcAddr("glTexParameterf"))
-	if gpTexParameterf == nil {
-		return errors.New("glTexParameterf")
-	}
-	gpTexParameterfv = (C.GPTEXPARAMETERFV)(getProcAddr("glTexParameterfv"))
-	if gpTexParameterfv == nil {
-		return errors.New("glTexParameterfv")
-	}
-	gpTexParameteri = (C.GPTEXPARAMETERI)(getProcAddr("glTexParameteri"))
-	if gpTexParameteri == nil {
-		return errors.New("glTexParameteri")
-	}
-	gpTexParameteriv = (C.GPTEXPARAMETERIV)(getProcAddr("glTexParameteriv"))
-	if gpTexParameteriv == nil {
-		return errors.New("glTexParameteriv")
-	}
-	gpTexStorage1DEXT = (C.GPTEXSTORAGE1DEXT)(getProcAddr("glTexStorage1DEXT"))
-	gpTexStorage2D = (C.GPTEXSTORAGE2D)(getProcAddr("glTexStorage2D"))
-	if gpTexStorage2D == nil {
-		return errors.New("glTexStorage2D")
-	}
-	gpTexStorage2DEXT = (C.GPTEXSTORAGE2DEXT)(getProcAddr("glTexStorage2DEXT"))
-	gpTexStorage2DMultisample = (C.GPTEXSTORAGE2DMULTISAMPLE)(getProcAddr("glTexStorage2DMultisample"))
-	if gpTexStorage2DMultisample == nil {
-		return errors.New("glTexStorage2DMultisample")
-	}
-	gpTexStorage3D = (C.GPTEXSTORAGE3D)(getProcAddr("glTexStorage3D"))
-	if gpTexStorage3D == nil {
-		return errors.New("glTexStorage3D")
-	}
-	gpTexStorage3DEXT = (C.GPTEXSTORAGE3DEXT)(getProcAddr("glTexStorage3DEXT"))
-	gpTexStorage3DMultisample = (C.GPTEXSTORAGE3DMULTISAMPLE)(getProcAddr("glTexStorage3DMultisample"))
-	if gpTexStorage3DMultisample == nil {
-		return errors.New("glTexStorage3DMultisample")
-	}
-	gpTexStorage3DMultisampleOES = (C.GPTEXSTORAGE3DMULTISAMPLEOES)(getProcAddr("glTexStorage3DMultisampleOES"))
-	gpTexStorageAttribs2DEXT = (C.GPTEXSTORAGEATTRIBS2DEXT)(getProcAddr("glTexStorageAttribs2DEXT"))
-	gpTexStorageAttribs3DEXT = (C.GPTEXSTORAGEATTRIBS3DEXT)(getProcAddr("glTexStorageAttribs3DEXT"))
-	gpTexStorageMem1DEXT = (C.GPTEXSTORAGEMEM1DEXT)(getProcAddr("glTexStorageMem1DEXT"))
-	gpTexStorageMem2DEXT = (C.GPTEXSTORAGEMEM2DEXT)(getProcAddr("glTexStorageMem2DEXT"))
-	gpTexStorageMem2DMultisampleEXT = (C.GPTEXSTORAGEMEM2DMULTISAMPLEEXT)(getProcAddr("glTexStorageMem2DMultisampleEXT"))
-	gpTexStorageMem3DEXT = (C.GPTEXSTORAGEMEM3DEXT)(getProcAddr("glTexStorageMem3DEXT"))
-	gpTexStorageMem3DMultisampleEXT = (C.GPTEXSTORAGEMEM3DMULTISAMPLEEXT)(getProcAddr("glTexStorageMem3DMultisampleEXT"))
-	gpTexSubImage2D = (C.GPTEXSUBIMAGE2D)(getProcAddr("glTexSubImage2D"))
-	if gpTexSubImage2D == nil {
-		return errors.New("glTexSubImage2D")
-	}
-	gpTexSubImage3D = (C.GPTEXSUBIMAGE3D)(getProcAddr("glTexSubImage3D"))
-	if gpTexSubImage3D == nil {
-		return errors.New("glTexSubImage3D")
-	}
-	gpTexSubImage3DOES = (C.GPTEXSUBIMAGE3DOES)(getProcAddr("glTexSubImage3DOES"))
-	gpTextureAttachMemoryNV = (C.GPTEXTUREATTACHMEMORYNV)(getProcAddr("glTextureAttachMemoryNV"))
-	gpTextureBarrierNV = (C.GPTEXTUREBARRIERNV)(getProcAddr("glTextureBarrierNV"))
-	gpTextureFoveationParametersQCOM = (C.GPTEXTUREFOVEATIONPARAMETERSQCOM)(getProcAddr("glTextureFoveationParametersQCOM"))
-	gpTexturePageCommitmentMemNV = (C.GPTEXTUREPAGECOMMITMENTMEMNV)(getProcAddr("glTexturePageCommitmentMemNV"))
-	gpTextureStorage1DEXT = (C.GPTEXTURESTORAGE1DEXT)(getProcAddr("glTextureStorage1DEXT"))
-	gpTextureStorage2DEXT = (C.GPTEXTURESTORAGE2DEXT)(getProcAddr("glTextureStorage2DEXT"))
-	gpTextureStorage3DEXT = (C.GPTEXTURESTORAGE3DEXT)(getProcAddr("glTextureStorage3DEXT"))
-	gpTextureStorageMem1DEXT = (C.GPTEXTURESTORAGEMEM1DEXT)(getProcAddr("glTextureStorageMem1DEXT"))
-	gpTextureStorageMem2DEXT = (C.GPTEXTURESTORAGEMEM2DEXT)(getProcAddr("glTextureStorageMem2DEXT"))
-	gpTextureStorageMem2DMultisampleEXT = (C.GPTEXTURESTORAGEMEM2DMULTISAMPLEEXT)(getProcAddr("glTextureStorageMem2DMultisampleEXT"))
-	gpTextureStorageMem3DEXT = (C.GPTEXTURESTORAGEMEM3DEXT)(getProcAddr("glTextureStorageMem3DEXT"))
-	gpTextureStorageMem3DMultisampleEXT = (C.GPTEXTURESTORAGEMEM3DMULTISAMPLEEXT)(getProcAddr("glTextureStorageMem3DMultisampleEXT"))
-	gpTextureViewEXT = (C.GPTEXTUREVIEWEXT)(getProcAddr("glTextureViewEXT"))
-	gpTextureViewOES = (C.GPTEXTUREVIEWOES)(getProcAddr("glTextureViewOES"))
-	gpTransformFeedbackVaryings = (C.GPTRANSFORMFEEDBACKVARYINGS)(getProcAddr("glTransformFeedbackVaryings"))
-	if gpTransformFeedbackVaryings == nil {
-		return errors.New("glTransformFeedbackVaryings")
-	}
-	gpTransformPathNV = (C.GPTRANSFORMPATHNV)(getProcAddr("glTransformPathNV"))
-	gpUniform1f = (C.GPUNIFORM1F)(getProcAddr("glUniform1f"))
-	if gpUniform1f == nil {
-		return errors.New("glUniform1f")
-	}
-	gpUniform1fv = (C.GPUNIFORM1FV)(getProcAddr("glUniform1fv"))
-	if gpUniform1fv == nil {
-		return errors.New("glUniform1fv")
-	}
-	gpUniform1i = (C.GPUNIFORM1I)(getProcAddr("glUniform1i"))
-	if gpUniform1i == nil {
-		return errors.New("glUniform1i")
-	}
-	gpUniform1i64NV = (C.GPUNIFORM1I64NV)(getProcAddr("glUniform1i64NV"))
-	gpUniform1i64vNV = (C.GPUNIFORM1I64VNV)(getProcAddr("glUniform1i64vNV"))
-	gpUniform1iv = (C.GPUNIFORM1IV)(getProcAddr("glUniform1iv"))
-	if gpUniform1iv == nil {
-		return errors.New("glUniform1iv")
-	}
-	gpUniform1ui = (C.GPUNIFORM1UI)(getProcAddr("glUniform1ui"))
-	if gpUniform1ui == nil {
-		return errors.New("glUniform1ui")
-	}
-	gpUniform1ui64NV = (C.GPUNIFORM1UI64NV)(getProcAddr("glUniform1ui64NV"))
-	gpUniform1ui64vNV = (C.GPUNIFORM1UI64VNV)(getProcAddr("glUniform1ui64vNV"))
-	gpUniform1uiv = (C.GPUNIFORM1UIV)(getProcAddr("glUniform1uiv"))
-	if gpUniform1uiv == nil {
-		return errors.New("glUniform1uiv")
-	}
-	gpUniform2f = (C.GPUNIFORM2F)(getProcAddr("glUniform2f"))
-	if gpUniform2f == nil {
-		return errors.New("glUniform2f")
-	}
-	gpUniform2fv = (C.GPUNIFORM2FV)(getProcAddr("glUniform2fv"))
-	if gpUniform2fv == nil {
-		return errors.New("glUniform2fv")
-	}
-	gpUniform2i = (C.GPUNIFORM2I)(getProcAddr("glUniform2i"))
-	if gpUniform2i == nil {
-		return errors.New("glUniform2i")
-	}
-	gpUniform2i64NV = (C.GPUNIFORM2I64NV)(getProcAddr("glUniform2i64NV"))
-	gpUniform2i64vNV = (C.GPUNIFORM2I64VNV)(getProcAddr("glUniform2i64vNV"))
-	gpUniform2iv = (C.GPUNIFORM2IV)(getProcAddr("glUniform2iv"))
-	if gpUniform2iv == nil {
-		return errors.New("glUniform2iv")
-	}
-	gpUniform2ui = (C.GPUNIFORM2UI)(getProcAddr("glUniform2ui"))
-	if gpUniform2ui == nil {
-		return errors.New("glUniform2ui")
-	}
-	gpUniform2ui64NV = (C.GPUNIFORM2UI64NV)(getProcAddr("glUniform2ui64NV"))
-	gpUniform2ui64vNV = (C.GPUNIFORM2UI64VNV)(getProcAddr("glUniform2ui64vNV"))
-	gpUniform2uiv = (C.GPUNIFORM2UIV)(getProcAddr("glUniform2uiv"))
-	if gpUniform2uiv == nil {
-		return errors.New("glUniform2uiv")
-	}
-	gpUniform3f = (C.GPUNIFORM3F)(getProcAddr("glUniform3f"))
-	if gpUniform3f == nil {
-		return errors.New("glUniform3f")
-	}
-	gpUniform3fv = (C.GPUNIFORM3FV)(getProcAddr("glUniform3fv"))
-	if gpUniform3fv == nil {
-		return errors.New("glUniform3fv")
-	}
-	gpUniform3i = (C.GPUNIFORM3I)(getProcAddr("glUniform3i"))
-	if gpUniform3i == nil {
-		return errors.New("glUniform3i")
-	}
-	gpUniform3i64NV = (C.GPUNIFORM3I64NV)(getProcAddr("glUniform3i64NV"))
-	gpUniform3i64vNV = (C.GPUNIFORM3I64VNV)(getProcAddr("glUniform3i64vNV"))
-	gpUniform3iv = (C.GPUNIFORM3IV)(getProcAddr("glUniform3iv"))
-	if gpUniform3iv == nil {
-		return errors.New("glUniform3iv")
-	}
-	gpUniform3ui = (C.GPUNIFORM3UI)(getProcAddr("glUniform3ui"))
-	if gpUniform3ui == nil {
-		return errors.New("glUniform3ui")
-	}
-	gpUniform3ui64NV = (C.GPUNIFORM3UI64NV)(getProcAddr("glUniform3ui64NV"))
-	gpUniform3ui64vNV = (C.GPUNIFORM3UI64VNV)(getProcAddr("glUniform3ui64vNV"))
-	gpUniform3uiv = (C.GPUNIFORM3UIV)(getProcAddr("glUniform3uiv"))
-	if gpUniform3uiv == nil {
-		return errors.New("glUniform3uiv")
-	}
-	gpUniform4f = (C.GPUNIFORM4F)(getProcAddr("glUniform4f"))
-	if gpUniform4f == nil {
-		return errors.New("glUniform4f")
-	}
-	gpUniform4fv = (C.GPUNIFORM4FV)(getProcAddr("glUniform4fv"))
-	if gpUniform4fv == nil {
-		return errors.New("glUniform4fv")
-	}
-	gpUniform4i = (C.GPUNIFORM4I)(getProcAddr("glUniform4i"))
-	if gpUniform4i == nil {
-		return errors.New("glUniform4i")
-	}
-	gpUniform4i64NV = (C.GPUNIFORM4I64NV)(getProcAddr("glUniform4i64NV"))
-	gpUniform4i64vNV = (C.GPUNIFORM4I64VNV)(getProcAddr("glUniform4i64vNV"))
-	gpUniform4iv = (C.GPUNIFORM4IV)(getProcAddr("glUniform4iv"))
-	if gpUniform4iv == nil {
-		return errors.New("glUniform4iv")
-	}
-	gpUniform4ui = (C.GPUNIFORM4UI)(getProcAddr("glUniform4ui"))
-	if gpUniform4ui == nil {
-		return errors.New("glUniform4ui")
-	}
-	gpUniform4ui64NV = (C.GPUNIFORM4UI64NV)(getProcAddr("glUniform4ui64NV"))
-	gpUniform4ui64vNV = (C.GPUNIFORM4UI64VNV)(getProcAddr("glUniform4ui64vNV"))
-	gpUniform4uiv = (C.GPUNIFORM4UIV)(getProcAddr("glUniform4uiv"))
-	if gpUniform4uiv == nil {
-		return errors.New("glUniform4uiv")
-	}
-	gpUniformBlockBinding = (C.GPUNIFORMBLOCKBINDING)(getProcAddr("glUniformBlockBinding"))
-	if gpUniformBlockBinding == nil {
-		return errors.New("glUniformBlockBinding")
-	}
-	gpUniformHandleui64IMG = (C.GPUNIFORMHANDLEUI64IMG)(getProcAddr("glUniformHandleui64IMG"))
-	gpUniformHandleui64NV = (C.GPUNIFORMHANDLEUI64NV)(getProcAddr("glUniformHandleui64NV"))
-	gpUniformHandleui64vIMG = (C.GPUNIFORMHANDLEUI64VIMG)(getProcAddr("glUniformHandleui64vIMG"))
-	gpUniformHandleui64vNV = (C.GPUNIFORMHANDLEUI64VNV)(getProcAddr("glUniformHandleui64vNV"))
-	gpUniformMatrix2fv = (C.GPUNIFORMMATRIX2FV)(getProcAddr("glUniformMatrix2fv"))
-	if gpUniformMatrix2fv == nil {
-		return errors.New("glUniformMatrix2fv")
-	}
-	gpUniformMatrix2x3fv = (C.GPUNIFORMMATRIX2X3FV)(getProcAddr("glUniformMatrix2x3fv"))
-	if gpUniformMatrix2x3fv == nil {
-		return errors.New("glUniformMatrix2x3fv")
-	}
-	gpUniformMatrix2x3fvNV = (C.GPUNIFORMMATRIX2X3FVNV)(getProcAddr("glUniformMatrix2x3fvNV"))
-	gpUniformMatrix2x4fv = (C.GPUNIFORMMATRIX2X4FV)(getProcAddr("glUniformMatrix2x4fv"))
-	if gpUniformMatrix2x4fv == nil {
-		return errors.New("glUniformMatrix2x4fv")
-	}
-	gpUniformMatrix2x4fvNV = (C.GPUNIFORMMATRIX2X4FVNV)(getProcAddr("glUniformMatrix2x4fvNV"))
-	gpUniformMatrix3fv = (C.GPUNIFORMMATRIX3FV)(getProcAddr("glUniformMatrix3fv"))
-	if gpUniformMatrix3fv == nil {
-		return errors.New("glUniformMatrix3fv")
-	}
-	gpUniformMatrix3x2fv = (C.GPUNIFORMMATRIX3X2FV)(getProcAddr("glUniformMatrix3x2fv"))
-	if gpUniformMatrix3x2fv == nil {
-		return errors.New("glUniformMatrix3x2fv")
-	}
-	gpUniformMatrix3x2fvNV = (C.GPUNIFORMMATRIX3X2FVNV)(getProcAddr("glUniformMatrix3x2fvNV"))
-	gpUniformMatrix3x4fv = (C.GPUNIFORMMATRIX3X4FV)(getProcAddr("glUniformMatrix3x4fv"))
-	if gpUniformMatrix3x4fv == nil {
-		return errors.New("glUniformMatrix3x4fv")
-	}
-	gpUniformMatrix3x4fvNV = (C.GPUNIFORMMATRIX3X4FVNV)(getProcAddr("glUniformMatrix3x4fvNV"))
-	gpUniformMatrix4fv = (C.GPUNIFORMMATRIX4FV)(getProcAddr("glUniformMatrix4fv"))
-	if gpUniformMatrix4fv == nil {
-		return errors.New("glUniformMatrix4fv")
-	}
-	gpUniformMatrix4x2fv = (C.GPUNIFORMMATRIX4X2FV)(getProcAddr("glUniformMatrix4x2fv"))
-	if gpUniformMatrix4x2fv == nil {
-		return errors.New("glUniformMatrix4x2fv")
-	}
-	gpUniformMatrix4x2fvNV = (C.GPUNIFORMMATRIX4X2FVNV)(getProcAddr("glUniformMatrix4x2fvNV"))
-	gpUniformMatrix4x3fv = (C.GPUNIFORMMATRIX4X3FV)(getProcAddr("glUniformMatrix4x3fv"))
-	if gpUniformMatrix4x3fv == nil {
-		return errors.New("glUniformMatrix4x3fv")
-	}
-	gpUniformMatrix4x3fvNV = (C.GPUNIFORMMATRIX4X3FVNV)(getProcAddr("glUniformMatrix4x3fvNV"))
-	gpUnmapBuffer = (C.GPUNMAPBUFFER)(getProcAddr("glUnmapBuffer"))
-	if gpUnmapBuffer == nil {
-		return errors.New("glUnmapBuffer")
-	}
-	gpUnmapBufferOES = (C.GPUNMAPBUFFEROES)(getProcAddr("glUnmapBufferOES"))
-	gpUseProgram = (C.GPUSEPROGRAM)(getProcAddr("glUseProgram"))
-	if gpUseProgram == nil {
-		return errors.New("glUseProgram")
-	}
-	gpUseProgramStages = (C.GPUSEPROGRAMSTAGES)(getProcAddr("glUseProgramStages"))
-	if gpUseProgramStages == nil {
-		return errors.New("glUseProgramStages")
-	}
-	gpUseProgramStagesEXT = (C.GPUSEPROGRAMSTAGESEXT)(getProcAddr("glUseProgramStagesEXT"))
-	gpUseShaderProgramEXT = (C.GPUSESHADERPROGRAMEXT)(getProcAddr("glUseShaderProgramEXT"))
-	gpValidateProgram = (C.GPVALIDATEPROGRAM)(getProcAddr("glValidateProgram"))
-	if gpValidateProgram == nil {
-		return errors.New("glValidateProgram")
-	}
-	gpValidateProgramPipeline = (C.GPVALIDATEPROGRAMPIPELINE)(getProcAddr("glValidateProgramPipeline"))
-	if gpValidateProgramPipeline == nil {
-		return errors.New("glValidateProgramPipeline")
-	}
-	gpValidateProgramPipelineEXT = (C.GPVALIDATEPROGRAMPIPELINEEXT)(getProcAddr("glValidateProgramPipelineEXT"))
-	gpVertexAttrib1f = (C.GPVERTEXATTRIB1F)(getProcAddr("glVertexAttrib1f"))
-	if gpVertexAttrib1f == nil {
-		return errors.New("glVertexAttrib1f")
-	}
-	gpVertexAttrib1fv = (C.GPVERTEXATTRIB1FV)(getProcAddr("glVertexAttrib1fv"))
-	if gpVertexAttrib1fv == nil {
-		return errors.New("glVertexAttrib1fv")
-	}
-	gpVertexAttrib2f = (C.GPVERTEXATTRIB2F)(getProcAddr("glVertexAttrib2f"))
-	if gpVertexAttrib2f == nil {
-		return errors.New("glVertexAttrib2f")
-	}
-	gpVertexAttrib2fv = (C.GPVERTEXATTRIB2FV)(getProcAddr("glVertexAttrib2fv"))
-	if gpVertexAttrib2fv == nil {
-		return errors.New("glVertexAttrib2fv")
-	}
-	gpVertexAttrib3f = (C.GPVERTEXATTRIB3F)(getProcAddr("glVertexAttrib3f"))
-	if gpVertexAttrib3f == nil {
-		return errors.New("glVertexAttrib3f")
-	}
-	gpVertexAttrib3fv = (C.GPVERTEXATTRIB3FV)(getProcAddr("glVertexAttrib3fv"))
-	if gpVertexAttrib3fv == nil {
-		return errors.New("glVertexAttrib3fv")
-	}
-	gpVertexAttrib4f = (C.GPVERTEXATTRIB4F)(getProcAddr("glVertexAttrib4f"))
-	if gpVertexAttrib4f == nil {
-		return errors.New("glVertexAttrib4f")
-	}
-	gpVertexAttrib4fv = (C.GPVERTEXATTRIB4FV)(getProcAddr("glVertexAttrib4fv"))
-	if gpVertexAttrib4fv == nil {
-		return errors.New("glVertexAttrib4fv")
-	}
-	gpVertexAttribBinding = (C.GPVERTEXATTRIBBINDING)(getProcAddr("glVertexAttribBinding"))
-	if gpVertexAttribBinding == nil {
-		return errors.New("glVertexAttribBinding")
-	}
-	gpVertexAttribDivisor = (C.GPVERTEXATTRIBDIVISOR)(getProcAddr("glVertexAttribDivisor"))
-	if gpVertexAttribDivisor == nil {
-		return errors.New("glVertexAttribDivisor")
-	}
-	gpVertexAttribDivisorANGLE = (C.GPVERTEXATTRIBDIVISORANGLE)(getProcAddr("glVertexAttribDivisorANGLE"))
-	gpVertexAttribDivisorEXT = (C.GPVERTEXATTRIBDIVISOREXT)(getProcAddr("glVertexAttribDivisorEXT"))
-	gpVertexAttribDivisorNV = (C.GPVERTEXATTRIBDIVISORNV)(getProcAddr("glVertexAttribDivisorNV"))
-	gpVertexAttribFormat = (C.GPVERTEXATTRIBFORMAT)(getProcAddr("glVertexAttribFormat"))
-	if gpVertexAttribFormat == nil {
-		return errors.New("glVertexAttribFormat")
-	}
-	gpVertexAttribI4i = (C.GPVERTEXATTRIBI4I)(getProcAddr("glVertexAttribI4i"))
-	if gpVertexAttribI4i == nil {
-		return errors.New("glVertexAttribI4i")
-	}
-	gpVertexAttribI4iv = (C.GPVERTEXATTRIBI4IV)(getProcAddr("glVertexAttribI4iv"))
-	if gpVertexAttribI4iv == nil {
-		return errors.New("glVertexAttribI4iv")
-	}
-	gpVertexAttribI4ui = (C.GPVERTEXATTRIBI4UI)(getProcAddr("glVertexAttribI4ui"))
-	if gpVertexAttribI4ui == nil {
-		return errors.New("glVertexAttribI4ui")
-	}
-	gpVertexAttribI4uiv = (C.GPVERTEXATTRIBI4UIV)(getProcAddr("glVertexAttribI4uiv"))
-	if gpVertexAttribI4uiv == nil {
-		return errors.New("glVertexAttribI4uiv")
-	}
-	gpVertexAttribIFormat = (C.GPVERTEXATTRIBIFORMAT)(getProcAddr("glVertexAttribIFormat"))
-	if gpVertexAttribIFormat == nil {
-		return errors.New("glVertexAttribIFormat")
-	}
-	gpVertexAttribIPointer = (C.GPVERTEXATTRIBIPOINTER)(getProcAddr("glVertexAttribIPointer"))
-	if gpVertexAttribIPointer == nil {
-		return errors.New("glVertexAttribIPointer")
-	}
-	gpVertexAttribPointer = (C.GPVERTEXATTRIBPOINTER)(getProcAddr("glVertexAttribPointer"))
-	if gpVertexAttribPointer == nil {
-		return errors.New("glVertexAttribPointer")
-	}
-	gpVertexBindingDivisor = (C.GPVERTEXBINDINGDIVISOR)(getProcAddr("glVertexBindingDivisor"))
-	if gpVertexBindingDivisor == nil {
-		return errors.New("glVertexBindingDivisor")
-	}
-	gpViewport = (C.GPVIEWPORT)(getProcAddr("glViewport"))
-	if gpViewport == nil {
-		return errors.New("glViewport")
-	}
-	gpViewportArrayvNV = (C.GPVIEWPORTARRAYVNV)(getProcAddr("glViewportArrayvNV"))
-	gpViewportArrayvOES = (C.GPVIEWPORTARRAYVOES)(getProcAddr("glViewportArrayvOES"))
-	gpViewportIndexedfNV = (C.GPVIEWPORTINDEXEDFNV)(getProcAddr("glViewportIndexedfNV"))
-	gpViewportIndexedfOES = (C.GPVIEWPORTINDEXEDFOES)(getProcAddr("glViewportIndexedfOES"))
-	gpViewportIndexedfvNV = (C.GPVIEWPORTINDEXEDFVNV)(getProcAddr("glViewportIndexedfvNV"))
-	gpViewportIndexedfvOES = (C.GPVIEWPORTINDEXEDFVOES)(getProcAddr("glViewportIndexedfvOES"))
-	gpViewportPositionWScaleNV = (C.GPVIEWPORTPOSITIONWSCALENV)(getProcAddr("glViewportPositionWScaleNV"))
-	gpViewportSwizzleNV = (C.GPVIEWPORTSWIZZLENV)(getProcAddr("glViewportSwizzleNV"))
-	gpWaitSemaphoreEXT = (C.GPWAITSEMAPHOREEXT)(getProcAddr("glWaitSemaphoreEXT"))
-	gpWaitSync = (C.GPWAITSYNC)(getProcAddr("glWaitSync"))
-	if gpWaitSync == nil {
-		return errors.New("glWaitSync")
-	}
-	gpWaitSyncAPPLE = (C.GPWAITSYNCAPPLE)(getProcAddr("glWaitSyncAPPLE"))
-	gpWaitVkSemaphoreNV = (C.GPWAITVKSEMAPHORENV)(getProcAddr("glWaitVkSemaphoreNV"))
-	gpWeightPathsNV = (C.GPWEIGHTPATHSNV)(getProcAddr("glWeightPathsNV"))
-	gpWindowRectanglesEXT = (C.GPWINDOWRECTANGLESEXT)(getProcAddr("glWindowRectanglesEXT"))
+	return initWithProcAddrFunc(getProcAddr, false)
+}
+func initWithProcAddrFunc(getProcAddr func(name string) unsafe.Pointer, terminated bool) error {
+	var firstMissing string
+	{
+		name := "glAcquireKeyedMutexWin32EXT"
+		if terminated {
+			name = "glAcquireKeyedMutexWin32EXT\x00"
+		}
+		gpAcquireKeyedMutexWin32EXT = (C.GPACQUIREKEYEDMUTEXWIN32EXT)(getProcAddr(name))
+	}
+	{
+		name := "glActiveProgramEXT"
+		if terminated {
+			name = "glActiveProgramEXT\x00"
+		}
+		gpActiveProgramEXT = (C.GPACTIVEPROGRAMEXT)(getProcAddr(name))
+	}
+	{
+		name := "glActiveShaderProgram"
+		if terminated {
+			name = "glActiveShaderProgram\x00"
+		}
+		gpActiveShaderProgram = (C.GPACTIVESHADERPROGRAM)(getProcAddr(name))
+		if gpActiveShaderProgram == nil && firstMissing == "" {
+			firstMissing = "glActiveShaderProgram"
+		}
+	}
+	{
+		name := "glActiveShaderProgramEXT"
+		if terminated {
+			name = "glActiveShaderProgramEXT\x00"
+		}
+		gpActiveShaderProgramEXT = (C.GPACTIVESHADERPROGRAMEXT)(getProcAddr(name))
+	}
+	{
+		name := "glActiveTexture"
+		if terminated {
+			name = "glActiveTexture\x00"
+		}
+		gpActiveTexture = (C.GPACTIVETEXTURE)(getProcAddr(name))
+		if gpActiveTexture == nil && firstMissing == "" {
+			firstMissing = "glActiveTexture"
+		}
+	}
+	{
+		name := "glAlphaFuncQCOM"
+		if terminated {
+			name = "glAlphaFuncQCOM\x00"
+		}
+		gpAlphaFuncQCOM = (C.GPALPHAFUNCQCOM)(getProcAddr(name))
+	}
+	{
+		name := "glApplyFramebufferAttachmentCMAAINTEL"
+		if terminated {
+			name = "glApplyFramebufferAttachmentCMAAINTEL\x00"
+		}
+		gpApplyFramebufferAttachmentCMAAINTEL = (C.GPAPPLYFRAMEBUFFERATTACHMENTCMAAINTEL)(getProcAddr(name))
+	}
+	{
+		name := "glAttachShader"
+		if terminated {
+			name = "glAttachShader\x00"
+		}
+		gpAttachShader = (C.GPATTACHSHADER)(getProcAddr(name))
+		if gpAttachShader == nil && firstMissing == "" {
+			firstMissing = "glAttachShader"
+		}
+	}
+	{
+		name := "glBeginConditionalRenderNV"
+		if terminated {
+			name = "glBeginConditionalRenderNV\x00"
+		}
+		gpBeginConditionalRenderNV = (C.GPBEGINCONDITIONALRENDERNV)(getProcAddr(name))
+	}
+	{
+		name := "glBeginPerfMonitorAMD"
+		if terminated {
+			name = "glBeginPerfMonitorAMD\x00"
+		}
+		gpBeginPerfMonitorAMD = (C.GPBEGINPERFMONITORAMD)(getProcAddr(name))
+	}
+	{
+		name := "glBeginPerfQueryINTEL"
+		if terminated {
+			name = "glBeginPerfQueryINTEL\x00"
+		}
+		gpBeginPerfQueryINTEL = (C.GPBEGINPERFQUERYINTEL)(getProcAddr(name))
+	}
+	{
+		name := "glBeginQuery"
+		if terminated {
+			name = "glBeginQuery\x00"
+		}
+		gpBeginQuery = (C.GPBEGINQUERY)(getProcAddr(name))
+		if gpBeginQuery == nil && firstMissing == "" {
+			firstMissing = "glBeginQuery"
+		}
+	}
+	{
+		name := "glBeginQueryEXT"
+		if terminated {
+			name = "glBeginQueryEXT\x00"
+		}
+		gpBeginQueryEXT = (C.GPBEGINQUERYEXT)(getProcAddr(name))
+	}
+	{
+		name := "glBeginTransformFeedback"
+		if terminated {
+			name = "glBeginTransformFeedback\x00"
+		}
+		gpBeginTransformFeedback = (C.GPBEGINTRANSFORMFEEDBACK)(getProcAddr(name))
+		if gpBeginTransformFeedback == nil && firstMissing == "" {
+			firstMissing = "glBeginTransformFeedback"
+		}
+	}
+	{
+		name := "glBindAttribLocation"
+		if terminated {
+			name = "glBindAttribLocation\x00"
+		}
+		gpBindAttribLocation = (C.GPBINDATTRIBLOCATION)(getProcAddr(name))
+		if gpBindAttribLocation == nil && firstMissing == "" {
+			firstMissing = "glBindAttribLocation"
+		}
+	}
+	{
+		name := "glBindBuffer"
+		if terminated {
+			name = "glBindBuffer\x00"
+		}
+		gpBindBuffer = (C.GPBINDBUFFER)(getProcAddr(name))
+		if gpBindBuffer == nil && firstMissing == "" {
+			firstMissing = "glBindBuffer"
+		}
+	}
+	{
+		name := "glBindBufferBase"
+		if terminated {
+			name = "glBindBufferBase\x00"
+		}
+		gpBindBufferBase = (C.GPBINDBUFFERBASE)(getProcAddr(name))
+		if gpBindBufferBase == nil && firstMissing == "" {
+			firstMissing = "glBindBufferBase"
+		}
+	}
+	{
+		name := "glBindBufferRange"
+		if terminated {
+			name = "glBindBufferRange\x00"
+		}
+		gpBindBufferRange = (C.GPBINDBUFFERRANGE)(getProcAddr(name))
+		if gpBindBufferRange == nil && firstMissing == "" {
+			firstMissing = "glBindBufferRange"
+		}
+	}
+	{
+		name := "glBindFragDataLocationEXT"
+		if terminated {
+			name = "glBindFragDataLocationEXT\x00"
+		}
+		gpBindFragDataLocationEXT = (C.GPBINDFRAGDATALOCATIONEXT)(getProcAddr(name))
+	}
+	{
+		name := "glBindFragDataLocationIndexedEXT"
+		if terminated {
+			name = "glBindFragDataLocationIndexedEXT\x00"
+		}
+		gpBindFragDataLocationIndexedEXT = (C.GPBINDFRAGDATALOCATIONINDEXEDEXT)(getProcAddr(name))
+	}
+	{
+		name := "glBindFramebuffer"
+		if terminated {
+			name = "glBindFramebuffer\x00"
+		}
+		gpBindFramebuffer = (C.GPBINDFRAMEBUFFER)(getProcAddr(name))
+		if gpBindFramebuffer == nil && firstMissing == "" {
+			firstMissing = "glBindFramebuffer"
+		}
+	}
+	{
+		name := "glBindImageTexture"
+		if terminated {
+			name = "glBindImageTexture\x00"
+		}
+		gpBindImageTexture = (C.GPBINDIMAGETEXTURE)(getProcAddr(name))
+		if gpBindImageTexture == nil && firstMissing == "" {
+			firstMissing = "glBindImageTexture"
+		}
+	}
+	{
+		name := "glBindProgramPipeline"
+		if terminated {
+			name = "glBindProgramPipeline\x00"
+		}
+		gpBindProgramPipeline = (C.GPBINDPROGRAMPIPELINE)(getProcAddr(name))
+		if gpBindProgramPipeline == nil && firstMissing == "" {
+			firstMissing = "glBindProgramPipeline"
+		}
+	}
+	{
+		name := "glBindProgramPipelineEXT"
+		if terminated {
+			name = "glBindProgramPipelineEXT\x00"
+		}
+		gpBindProgramPipelineEXT = (C.GPBINDPROGRAMPIPELINEEXT)(getProcAddr(name))
+	}
+	{
+		name := "glBindRenderbuffer"
+		if terminated {
+			name = "glBindRenderbuffer\x00"
+		}
+		gpBindRenderbuffer = (C.GPBINDRENDERBUFFER)(getProcAddr(name))
+		if gpBindRenderbuffer == nil && firstMissing == "" {
+			firstMissing = "glBindRenderbuffer"
+		}
+	}
+	{
+		name := "glBindSampler"
+		if terminated {
+			name = "glBindSampler\x00"
+		}
+		gpBindSampler = (C.GPBINDSAMPLER)(getProcAddr(name))
+		if gpBindSampler == nil && firstMissing == "" {
+			firstMissing = "glBindSampler"
+		}
+	}
+	{
+		name := "glBindShadingRateImageNV"
+		if terminated {
+			name = "glBindShadingRateImageNV\x00"
+		}
+		gpBindShadingRateImageNV = (C.GPBINDSHADINGRATEIMAGENV)(getProcAddr(name))
+	}
+	{
+		name := "glBindTexture"
+		if terminated {
+			name = "glBindTexture\x00"
+		}
+		gpBindTexture = (C.GPBINDTEXTURE)(getProcAddr(name))
+		if gpBindTexture == nil && firstMissing == "" {
+			firstMissing = "glBindTexture"
+		}
+	}
+	{
+		name := "glBindTransformFeedback"
+		if terminated {
+			name = "glBindTransformFeedback\x00"
+		}
+		gpBindTransformFeedback = (C.GPBINDTRANSFORMFEEDBACK)(getProcAddr(name))
+		if gpBindTransformFeedback == nil && firstMissing == "" {
+			firstMissing = "glBindTransformFeedback"
+		}
+	}
+	{
+		name := "glBindVertexArray"
+		if terminated {
+			name = "glBindVertexArray\x00"
+		}
+		gpBindVertexArray = (C.GPBINDVERTEXARRAY)(getProcAddr(name))
+		if gpBindVertexArray == nil && firstMissing == "" {
+			firstMissing = "glBindVertexArray"
+		}
+	}
+	{
+		name := "glBindVertexArrayOES"
+		if terminated {
+			name = "glBindVertexArrayOES\x00"
+		}
+		gpBindVertexArrayOES = (C.GPBINDVERTEXARRAYOES)(getProcAddr(name))
+	}
+	{
+		name := "glBindVertexBuffer"
+		if terminated {
+			name = "glBindVertexBuffer\x00"
+		}
+		gpBindVertexBuffer = (C.GPBINDVERTEXBUFFER)(getProcAddr(name))
+		if gpBindVertexBuffer == nil && firstMissing == "" {
+			firstMissing = "glBindVertexBuffer"
+		}
+	}
+	{
+		name := "glBlendBarrier"
+		if terminated {
+			name = "glBlendBarrier\x00"
+		}
+		gpBlendBarrier = (C.GPBLENDBARRIER)(getProcAddr(name))
+		if gpBlendBarrier == nil && firstMissing == "" {
+			firstMissing = "glBlendBarrier"
+		}
+	}
+	{
+		name := "glBlendBarrierKHR"
+		if terminated {
+			name = "glBlendBarrierKHR\x00"
+		}
+		gpBlendBarrierKHR = (C.GPBLENDBARRIERKHR)(getProcAddr(name))
+	}
+	{
+		name := "glBlendBarrierNV"
+		if terminated {
+			name = "glBlendBarrierNV\x00"
+		}
+		gpBlendBarrierNV = (C.GPBLENDBARRIERNV)(getProcAddr(name))
+	}
+	{
+		name := "glBlendColor"
+		if terminated {
+			name = "glBlendColor\x00"
+		}
+		gpBlendColor = (C.GPBLENDCOLOR)(getProcAddr(name))
+		if gpBlendColor == nil && firstMissing == "" {
+			firstMissing = "glBlendColor"
+		}
+	}
+	{
+		name := "glBlendEquation"
+		if terminated {
+			name = "glBlendEquation\x00"
+		}
+		gpBlendEquation = (C.GPBLENDEQUATION)(getProcAddr(name))
+		if gpBlendEquation == nil && firstMissing == "" {
+			firstMissing = "glBlendEquation"
+		}
+	}
+	{
+		name := "glBlendEquationEXT"
+		if terminated {
+			name = "glBlendEquationEXT\x00"
+		}
+		gpBlendEquationEXT = (C.GPBLENDEQUATIONEXT)(getProcAddr(name))
+	}
+	{
+		name := "glBlendEquationSeparate"
+		if terminated {
+			name = "glBlendEquationSeparate\x00"
+		}
+		gpBlendEquationSeparate = (C.GPBLENDEQUATIONSEPARATE)(getProcAddr(name))
+		if gpBlendEquationSeparate == nil && firstMissing == "" {
+			firstMissing = "glBlendEquationSeparate"
+		}
+	}
+	{
+		name := "glBlendEquationSeparatei"
+		if terminated {
+			name = "glBlendEquationSeparatei\x00"
+		}
+		gpBlendEquationSeparatei = (C.GPBLENDEQUATIONSEPARATEI)(getProcAddr(name))
+		if gpBlendEquationSeparatei == nil && firstMissing == "" {
+			firstMissing = "glBlendEquationSeparatei"
+		}
+	}
+	{
+		name := "glBlendEquationSeparateiEXT"
+		if terminated {
+			name = "glBlendEquationSeparateiEXT\x00"
+		}
+		gpBlendEquationSeparateiEXT = (C.GPBLENDEQUATIONSEPARATEIEXT)(getProcAddr(name))
+	}
+	{
+		name := "glBlendEquationSeparateiOES"
+		if terminated {
+			name = "glBlendEquationSeparateiOES\x00"
+		}
+		gpBlendEquationSeparateiOES = (C.GPBLENDEQUATIONSEPARATEIOES)(getProcAddr(name))
+	}
+	{
+		name := "glBlendEquationi"
+		if terminated {
+			name = "glBlendEquationi\x00"
+		}
+		gpBlendEquationi = (C.GPBLENDEQUATIONI)(getProcAddr(name))
+		if gpBlendEquationi == nil && firstMissing == "" {
+			firstMissing = "glBlendEquationi"
+		}
+	}
+	{
+		name := "glBlendEquationiEXT"
+		if terminated {
+			name = "glBlendEquationiEXT\x00"
+		}
+		gpBlendEquationiEXT = (C.GPBLENDEQUATIONIEXT)(getProcAddr(name))
+	}
+	{
+		name := "glBlendEquationiOES"
+		if terminated {
+			name = "glBlendEquationiOES\x00"
+		}
+		gpBlendEquationiOES = (C.GPBLENDEQUATIONIOES)(getProcAddr(name))
+	}
+	{
+		name := "glBlendFunc"
+		if terminated {
+			name = "glBlendFunc\x00"
+		}
+		gpBlendFunc = (C.GPBLENDFUNC)(getProcAddr(name))
+		if gpBlendFunc == nil && firstMissing == "" {
+			firstMissing = "glBlendFunc"
+		}
+	}
+	{
+		name := "glBlendFuncSeparate"
+		if terminated {
+			name = "glBlendFuncSeparate\x00"
+		}
+		gpBlendFuncSeparate = (C.GPBLENDFUNCSEPARATE)(getProcAddr(name))
+		if gpBlendFuncSeparate == nil && firstMissing == "" {
+			firstMissing = "glBlendFuncSeparate"
+		}
+	}
+	{
+		name := "glBlendFuncSeparatei"
+		if terminated {
+			name = "glBlendFuncSeparatei\x00"
+		}
+		gpBlendFuncSeparatei = (C.GPBLENDFUNCSEPARATEI)(getProcAddr(name))
+		if gpBlendFuncSeparatei == nil && firstMissing == "" {
+			firstMissing = "glBlendFuncSeparatei"
+		}
+	}
+	{
+		name := "glBlendFuncSeparateiEXT"
+		if terminated {
+			name = "glBlendFuncSeparateiEXT\x00"
+		}
+		gpBlendFuncSeparateiEXT = (C.GPBLENDFUNCSEPARATEIEXT)(getProcAddr(name))
+	}
+	{
+		name := "glBlendFuncSeparateiOES"
+		if terminated {
+			name = "glBlendFuncSeparateiOES\x00"
+		}
+		gpBlendFuncSeparateiOES = (C.GPBLENDFUNCSEPARATEIOES)(getProcAddr(name))
+	}
+	{
+		name := "glBlendFunci"
+		if terminated {
+			name = "glBlendFunci\x00"
+		}
+		gpBlendFunci = (C.GPBLENDFUNCI)(getProcAddr(name))
+		if gpBlendFunci == nil && firstMissing == "" {
+			firstMissing = "glBlendFunci"
+		}
+	}
+	{
+		name := "glBlendFunciEXT"
+		if terminated {
+			name = "glBlendFunciEXT\x00"
+		}
+		gpBlendFunciEXT = (C.GPBLENDFUNCIEXT)(getProcAddr(name))
+	}
+	{
+		name := "glBlendFunciOES"
+		if terminated {
+			name = "glBlendFunciOES\x00"
+		}
+		gpBlendFunciOES = (C.GPBLENDFUNCIOES)(getProcAddr(name))
+	}
+	{
+		name := "glBlendParameteriNV"
+		if terminated {
+			name = "glBlendParameteriNV\x00"
+		}
+		gpBlendParameteriNV = (C.GPBLENDPARAMETERINV)(getProcAddr(name))
+	}
+	{
+		name := "glBlitFramebuffer"
+		if terminated {
+			name = "glBlitFramebuffer\x00"
+		}
+		gpBlitFramebuffer = (C.GPBLITFRAMEBUFFER)(getProcAddr(name))
+		if gpBlitFramebuffer == nil && firstMissing == "" {
+			firstMissing = "glBlitFramebuffer"
+		}
+	}
+	{
+		name := "glBlitFramebufferANGLE"
+		if terminated {
+			name = "glBlitFramebufferANGLE\x00"
+		}
+		gpBlitFramebufferANGLE = (C.GPBLITFRAMEBUFFERANGLE)(getProcAddr(name))
+	}
+	{
+		name := "glBlitFramebufferLayerEXT"
+		if terminated {
+			name = "glBlitFramebufferLayerEXT\x00"
+		}
+		gpBlitFramebufferLayerEXT = (C.GPBLITFRAMEBUFFERLAYEREXT)(getProcAddr(name))
+	}
+	{
+		name := "glBlitFramebufferLayersEXT"
+		if terminated {
+			name = "glBlitFramebufferLayersEXT\x00"
+		}
+		gpBlitFramebufferLayersEXT = (C.GPBLITFRAMEBUFFERLAYERSEXT)(getProcAddr(name))
+	}
+	{
+		name := "glBlitFramebufferNV"
+		if terminated {
+			name = "glBlitFramebufferNV\x00"
+		}
+		gpBlitFramebufferNV = (C.GPBLITFRAMEBUFFERNV)(getProcAddr(name))
+	}
+	{
+		name := "glBufferAttachMemoryNV"
+		if terminated {
+			name = "glBufferAttachMemoryNV\x00"
+		}
+		gpBufferAttachMemoryNV = (C.GPBUFFERATTACHMEMORYNV)(getProcAddr(name))
+	}
+	{
+		name := "glBufferData"
+		if terminated {
+			name = "glBufferData\x00"
+		}
+		gpBufferData = (C.GPBUFFERDATA)(getProcAddr(name))
+		if gpBufferData == nil && firstMissing == "" {
+			firstMissing = "glBufferData"
+		}
+	}
+	{
+		name := "glBufferPageCommitmentMemNV"
+		if terminated {
+			name = "glBufferPageCommitmentMemNV\x00"
+		}
+		gpBufferPageCommitmentMemNV = (C.GPBUFFERPAGECOMMITMENTMEMNV)(getProcAddr(name))
+	}
+	{
+		name := "glBufferStorageEXT"
+		if terminated {
+			name = "glBufferStorageEXT\x00"
+		}
+		gpBufferStorageEXT = (C.GPBUFFERSTORAGEEXT)(getProcAddr(name))
+	}
+	{
+		name := "glBufferStorageExternalEXT"
+		if terminated {
+			name = "glBufferStorageExternalEXT\x00"
+		}
+		gpBufferStorageExternalEXT = (C.GPBUFFERSTORAGEEXTERNALEXT)(getProcAddr(name))
+	}
+	{
+		name := "glBufferStorageMemEXT"
+		if terminated {
+			name = "glBufferStorageMemEXT\x00"
+		}
+		gpBufferStorageMemEXT = (C.GPBUFFERSTORAGEMEMEXT)(getProcAddr(name))
+	}
+	{
+		name := "glBufferSubData"
+		if terminated {
+			name = "glBufferSubData\x00"
+		}
+		gpBufferSubData = (C.GPBUFFERSUBDATA)(getProcAddr(name))
+		if gpBufferSubData == nil && firstMissing == "" {
+			firstMissing = "glBufferSubData"
+		}
+	}
+	{
+		name := "glCheckFramebufferStatus"
+		if terminated {
+			name = "glCheckFramebufferStatus\x00"
+		}
+		gpCheckFramebufferStatus = (C.GPCHECKFRAMEBUFFERSTATUS)(getProcAddr(name))
+		if gpCheckFramebufferStatus == nil && firstMissing == "" {
+			firstMissing = "glCheckFramebufferStatus"
+		}
+	}
+	{
+		name := "glClear"
+		if terminated {
+			name = "glClear\x00"
+		}
+		gpClear = (C.GPCLEAR)(getProcAddr(name))
+		if gpClear == nil && firstMissing == "" {
+			firstMissing = "glClear"
+		}
+	}
+	{
+		name := "glClearBufferfi"
+		if terminated {
+			name = "glClearBufferfi\x00"
+		}
+		gpClearBufferfi = (C.GPCLEARBUFFERFI)(getProcAddr(name))
+		if gpClearBufferfi == nil && firstMissing == "" {
+			firstMissing = "glClearBufferfi"
+		}
+	}
+	{
+		name := "glClearBufferfv"
+		if terminated {
+			name = "glClearBufferfv\x00"
+		}
+		gpClearBufferfv = (C.GPCLEARBUFFERFV)(getProcAddr(name))
+		if gpClearBufferfv == nil && firstMissing == "" {
+			firstMissing = "glClearBufferfv"
+		}
+	}
+	{
+		name := "glClearBufferiv"
+		if terminated {
+			name = "glClearBufferiv\x00"
+		}
+		gpClearBufferiv = (C.GPCLEARBUFFERIV)(getProcAddr(name))
+		if gpClearBufferiv == nil && firstMissing == "" {
+			firstMissing = "glClearBufferiv"
+		}
+	}
+	{
+		name := "glClearBufferuiv"
+		if terminated {
+			name = "glClearBufferuiv\x00"
+		}
+		gpClearBufferuiv = (C.GPCLEARBUFFERUIV)(getProcAddr(name))
+		if gpClearBufferuiv == nil && firstMissing == "" {
+			firstMissing = "glClearBufferuiv"
+		}
+	}
+	{
+		name := "glClearColor"
+		if terminated {
+			name = "glClearColor\x00"
+		}
+		gpClearColor = (C.GPCLEARCOLOR)(getProcAddr(name))
+		if gpClearColor == nil && firstMissing == "" {
+			firstMissing = "glClearColor"
+		}
+	}
+	{
+		name := "glClearDepthf"
+		if terminated {
+			name = "glClearDepthf\x00"
+		}
+		gpClearDepthf = (C.GPCLEARDEPTHF)(getProcAddr(name))
+		if gpClearDepthf == nil && firstMissing == "" {
+			firstMissing = "glClearDepthf"
+		}
+	}
+	{
+		name := "glClearPixelLocalStorageuiEXT"
+		if terminated {
+			name = "glClearPixelLocalStorageuiEXT\x00"
+		}
+		gpClearPixelLocalStorageuiEXT = (C.GPCLEARPIXELLOCALSTORAGEUIEXT)(getProcAddr(name))
+	}
+	{
+		name := "glClearStencil"
+		if terminated {
+			name = "glClearStencil\x00"
+		}
+		gpClearStencil = (C.GPCLEARSTENCIL)(getProcAddr(name))
+		if gpClearStencil == nil && firstMissing == "" {
+			firstMissing = "glClearStencil"
+		}
+	}
+	{
+		name := "glClearTexImageEXT"
+		if terminated {
+			name = "glClearTexImageEXT\x00"
+		}
+		gpClearTexImageEXT = (C.GPCLEARTEXIMAGEEXT)(getProcAddr(name))
+	}
+	{
+		name := "glClearTexSubImageEXT"
+		if terminated {
+			name = "glClearTexSubImageEXT\x00"
+		}
+		gpClearTexSubImageEXT = (C.GPCLEARTEXSUBIMAGEEXT)(getProcAddr(name))
+	}
+	{
+		name := "glClientWaitSync"
+		if terminated {
+			name = "glClientWaitSync\x00"
+		}
+		gpClientWaitSync = (C.GPCLIENTWAITSYNC)(getProcAddr(name))
+		if gpClientWaitSync == nil && firstMissing == "" {
+			firstMissing = "glClientWaitSync"
+		}
+	}
+	{
+		name := "glClientWaitSyncAPPLE"
+		if terminated {
+			name = "glClientWaitSyncAPPLE\x00"
+		}
+		gpClientWaitSyncAPPLE = (C.GPCLIENTWAITSYNCAPPLE)(getProcAddr(name))
+	}
+	{
+		name := "glClipControlEXT"
+		if terminated {
+			name = "glClipControlEXT\x00"
+		}
+		gpClipControlEXT = (C.GPCLIPCONTROLEXT)(getProcAddr(name))
+	}
+	{
+		name := "glColorMask"
+		if terminated {
+			name = "glColorMask\x00"
+		}
+		gpColorMask = (C.GPCOLORMASK)(getProcAddr(name))
+		if gpColorMask == nil && firstMissing == "" {
+			firstMissing = "glColorMask"
+		}
+	}
+	{
+		name := "glColorMaski"
+		if terminated {
+			name = "glColorMaski\x00"
+		}
+		gpColorMaski = (C.GPCOLORMASKI)(getProcAddr(name))
+		if gpColorMaski == nil && firstMissing == "" {
+			firstMissing = "glColorMaski"
+		}
+	}
+	{
+		name := "glColorMaskiEXT"
+		if terminated {
+			name = "glColorMaskiEXT\x00"
+		}
+		gpColorMaskiEXT = (C.GPCOLORMASKIEXT)(getProcAddr(name))
+	}
+	{
+		name := "glColorMaskiOES"
+		if terminated {
+			name = "glColorMaskiOES\x00"
+		}
+		gpColorMaskiOES = (C.GPCOLORMASKIOES)(getProcAddr(name))
+	}
+	{
+		name := "glCompileShader"
+		if terminated {
+			name = "glCompileShader\x00"
+		}
+		gpCompileShader = (C.GPCOMPILESHADER)(getProcAddr(name))
+		if gpCompileShader == nil && firstMissing == "" {
+			firstMissing = "glCompileShader"
+		}
+	}
+	{
+		name := "glCompressedTexImage2D"
+		if terminated {
+			name = "glCompressedTexImage2D\x00"
+		}
+		gpCompressedTexImage2D = (C.GPCOMPRESSEDTEXIMAGE2D)(getProcAddr(name))
+		if gpCompressedTexImage2D == nil && firstMissing == "" {
+			firstMissing = "glCompressedTexImage2D"
+		}
+	}
+	{
+		name := "glCompressedTexImage3D"
+		if terminated {
+			name = "glCompressedTexImage3D\x00"
+		}
+		gpCompressedTexImage3D = (C.GPCOMPRESSEDTEXIMAGE3D)(getProcAddr(name))
+		if gpCompressedTexImage3D == nil && firstMissing == "" {
+			firstMissing = "glCompressedTexImage3D"
+		}
+	}
+	{
+		name := "glCompressedTexImage3DOES"
+		if terminated {
+			name = "glCompressedTexImage3DOES\x00"
+		}
+		gpCompressedTexImage3DOES = (C.GPCOMPRESSEDTEXIMAGE3DOES)(getProcAddr(name))
+	}
+	{
+		name := "glCompressedTexSubImage2D"
+		if terminated {
+			name = "glCompressedTexSubImage2D\x00"
+		}
+		gpCompressedTexSubImage2D = (C.GPCOMPRESSEDTEXSUBIMAGE2D)(getProcAddr(name))
+		if gpCompressedTexSubImage2D == nil && firstMissing == "" {
+			firstMissing = "glCompressedTexSubImage2D"
+		}
+	}
+	{
+		name := "glCompressedTexSubImage3D"
+		if terminated {
+			name = "glCompressedTexSubImage3D\x00"
+		}
+		gpCompressedTexSubImage3D = (C.GPCOMPRESSEDTEXSUBIMAGE3D)(getProcAddr(name))
+		if gpCompressedTexSubImage3D == nil && firstMissing == "" {
+			firstMissing = "glCompressedTexSubImage3D"
+		}
+	}
+	{
+		name := "glCompressedTexSubImage3DOES"
+		if terminated {
+			name = "glCompressedTexSubImage3DOES\x00"
+		}
+		gpCompressedTexSubImage3DOES = (C.GPCOMPRESSEDTEXSUBIMAGE3DOES)(getProcAddr(name))
+	}
+	{
+		name := "glConservativeRasterParameteriNV"
+		if terminated {
+			name = "glConservativeRasterParameteriNV\x00"
+		}
+		gpConservativeRasterParameteriNV = (C.GPCONSERVATIVERASTERPARAMETERINV)(getProcAddr(name))
+	}
+	{
+		name := "glCopyBufferSubData"
+		if terminated {
+			name = "glCopyBufferSubData\x00"
+		}
+		gpCopyBufferSubData = (C.GPCOPYBUFFERSUBDATA)(getProcAddr(name))
+		if gpCopyBufferSubData == nil && firstMissing == "" {
+			firstMissing = "glCopyBufferSubData"
+		}
+	}
+	{
+		name := "glCopyBufferSubDataNV"
+		if terminated {
+			name = "glCopyBufferSubDataNV\x00"
+		}
+		gpCopyBufferSubDataNV = (C.GPCOPYBUFFERSUBDATANV)(getProcAddr(name))
+	}
+	{
+		name := "glCopyImageSubData"
+		if terminated {
+			name = "glCopyImageSubData\x00"
+		}
+		gpCopyImageSubData = (C.GPCOPYIMAGESUBDATA)(getProcAddr(name))
+		if gpCopyImageSubData == nil && firstMissing == "" {
+			firstMissing = "glCopyImageSubData"
+		}
+	}
+	{
+		name := "glCopyImageSubDataEXT"
+		if terminated {
+			name = "glCopyImageSubDataEXT\x00"
+		}
+		gpCopyImageSubDataEXT = (C.GPCOPYIMAGESUBDATAEXT)(getProcAddr(name))
+	}
+	{
+		name := "glCopyImageSubDataOES"
+		if terminated {
+			name = "glCopyImageSubDataOES\x00"
+		}
+		gpCopyImageSubDataOES = (C.GPCOPYIMAGESUBDATAOES)(getProcAddr(name))
+	}
+	{
+		name := "glCopyPathNV"
+		if terminated {
+			name = "glCopyPathNV\x00"
+		}
+		gpCopyPathNV = (C.GPCOPYPATHNV)(getProcAddr(name))
+	}
+	{
+		name := "glCopyTexImage2D"
+		if terminated {
+			name = "glCopyTexImage2D\x00"
+		}
+		gpCopyTexImage2D = (C.GPCOPYTEXIMAGE2D)(getProcAddr(name))
+		if gpCopyTexImage2D == nil && firstMissing == "" {
+			firstMissing = "glCopyTexImage2D"
+		}
+	}
+	{
+		name := "glCopyTexSubImage2D"
+		if terminated {
+			name = "glCopyTexSubImage2D\x00"
+		}
+		gpCopyTexSubImage2D = (C.GPCOPYTEXSUBIMAGE2D)(getProcAddr(name))
+		if gpCopyTexSubImage2D == nil && firstMissing == "" {
+			firstMissing = "glCopyTexSubImage2D"
+		}
+	}
+	{
+		name := "glCopyTexSubImage3D"
+		if terminated {
+			name = "glCopyTexSubImage3D\x00"
+		}
+		gpCopyTexSubImage3D = (C.GPCOPYTEXSUBIMAGE3D)(getProcAddr(name))
+		if gpCopyTexSubImage3D == nil && firstMissing == "" {
+			firstMissing = "glCopyTexSubImage3D"
+		}
+	}
+	{
+		name := "glCopyTexSubImage3DOES"
+		if terminated {
+			name = "glCopyTexSubImage3DOES\x00"
+		}
+		gpCopyTexSubImage3DOES = (C.GPCOPYTEXSUBIMAGE3DOES)(getProcAddr(name))
+	}
+	{
+		name := "glCopyTextureLevelsAPPLE"
+		if terminated {
+			name = "glCopyTextureLevelsAPPLE\x00"
+		}
+		gpCopyTextureLevelsAPPLE = (C.GPCOPYTEXTURELEVELSAPPLE)(getProcAddr(name))
+	}
+	{
+		name := "glCoverFillPathInstancedNV"
+		if terminated {
+			name = "glCoverFillPathInstancedNV\x00"
+		}
+		gpCoverFillPathInstancedNV = (C.GPCOVERFILLPATHINSTANCEDNV)(getProcAddr(name))
+	}
+	{
+		name := "glCoverFillPathNV"
+		if terminated {
+			name = "glCoverFillPathNV\x00"
+		}
+		gpCoverFillPathNV = (C.GPCOVERFILLPATHNV)(getProcAddr(name))
+	}
+	{
+		name := "glCoverStrokePathInstancedNV"
+		if terminated {
+			name = "glCoverStrokePathInstancedNV\x00"
+		}
+		gpCoverStrokePathInstancedNV = (C.GPCOVERSTROKEPATHINSTANCEDNV)(getProcAddr(name))
+	}
+	{
+		name := "glCoverStrokePathNV"
+		if terminated {
+			name = "glCoverStrokePathNV\x00"
+		}
+		gpCoverStrokePathNV = (C.GPCOVERSTROKEPATHNV)(getProcAddr(name))
+	}
+	{
+		name := "glCoverageMaskNV"
+		if terminated {
+			name = "glCoverageMaskNV\x00"
+		}
+		gpCoverageMaskNV = (C.GPCOVERAGEMASKNV)(getProcAddr(name))
+	}
+	{
+		name := "glCoverageModulationNV"
+		if terminated {
+			name = "glCoverageModulationNV\x00"
+		}
+		gpCoverageModulationNV = (C.GPCOVERAGEMODULATIONNV)(getProcAddr(name))
+	}
+	{
+		name := "glCoverageModulationTableNV"
+		if terminated {
+			name = "glCoverageModulationTableNV\x00"
+		}
+		gpCoverageModulationTableNV = (C.GPCOVERAGEMODULATIONTABLENV)(getProcAddr(name))
+	}
+	{
+		name := "glCoverageOperationNV"
+		if terminated {
+			name = "glCoverageOperationNV\x00"
+		}
+		gpCoverageOperationNV = (C.GPCOVERAGEOPERATIONNV)(getProcAddr(name))
+	}
+	{
+		name := "glCreateMemoryObjectsEXT"
+		if terminated {
+			name = "glCreateMemoryObjectsEXT\x00"
+		}
+		gpCreateMemoryObjectsEXT = (C.GPCREATEMEMORYOBJECTSEXT)(getProcAddr(name))
+	}
+	{
+		name := "glCreatePerfQueryINTEL"
+		if terminated {
+			name = "glCreatePerfQueryINTEL\x00"
+		}
+		gpCreatePerfQueryINTEL = (C.GPCREATEPERFQUERYINTEL)(getProcAddr(name))
+	}
+	{
+		name := "glCreateProgram"
+		if terminated {
+			name = "glCreateProgram\x00"
+		}
+		gpCreateProgram = (C.GPCREATEPROGRAM)(getProcAddr(name))
+		if gpCreateProgram == nil && firstMissing == "" {
+			firstMissing = "glCreateProgram"
+		}
+	}
+	{
+		name := "glCreateSemaphoresNV"
+		if terminated {
+			name = "glCreateSemaphoresNV\x00"
+		}
+		gpCreateSemaphoresNV = (C.GPCREATESEMAPHORESNV)(getProcAddr(name))
+	}
+	{
+		name := "glCreateShader"
+		if terminated {
+			name = "glCreateShader\x00"
+		}
+		gpCreateShader = (C.GPCREATESHADER)(getProcAddr(name))
+		if gpCreateShader == nil && firstMissing == "" {
+			firstMissing = "glCreateShader"
+		}
+	}
+	{
+		name := "glCreateShaderProgramEXT"
+		if terminated {
+			name = "glCreateShaderProgramEXT\x00"
+		}
+		gpCreateShaderProgramEXT = (C.GPCREATESHADERPROGRAMEXT)(getProcAddr(name))
+	}
+	{
+		name := "glCreateShaderProgramv"
+		if terminated {
+			name = "glCreateShaderProgramv\x00"
+		}
+		gpCreateShaderProgramv = (C.GPCREATESHADERPROGRAMV)(getProcAddr(name))
+		if gpCreateShaderProgramv == nil && firstMissing == "" {
+			firstMissing = "glCreateShaderProgramv"
+		}
+	}
+	{
+		name := "glCreateShaderProgramvEXT"
+		if terminated {
+			name = "glCreateShaderProgramvEXT\x00"
+		}
+		gpCreateShaderProgramvEXT = (C.GPCREATESHADERPROGRAMVEXT)(getProcAddr(name))
+	}
+	{
+		name := "glCullFace"
+		if terminated {
+			name = "glCullFace\x00"
+		}
+		gpCullFace = (C.GPCULLFACE)(getProcAddr(name))
+		if gpCullFace == nil && firstMissing == "" {
+			firstMissing = "glCullFace"
+		}
+	}
+	{
+		name := "glDebugMessageCallback"
+		if terminated {
+			name = "glDebugMessageCallback\x00"
+		}
+		gpDebugMessageCallback = (C.GPDEBUGMESSAGECALLBACK)(getProcAddr(name))
+		if gpDebugMessageCallback == nil && firstMissing == "" {
+			firstMissing = "glDebugMessageCallback"
+		}
+	}
+	{
+		name := "glDebugMessageCallbackKHR"
+		if terminated {
+			name = "glDebugMessageCallbackKHR\x00"
+		}
+		gpDebugMessageCallbackKHR = (C.GPDEBUGMESSAGECALLBACKKHR)(getProcAddr(name))
+	}
+	{
+		name := "glDebugMessageControl"
+		if terminated {
+			name = "glDebugMessageControl\x00"
+		}
+		gpDebugMessageControl = (C.GPDEBUGMESSAGECONTROL)(getProcAddr(name))
+		if gpDebugMessageControl == nil && firstMissing == "" {
+			firstMissing = "glDebugMessageControl"
+		}
+	}
+	{
+		name := "glDebugMessageControlKHR"
+		if terminated {
+			name = "glDebugMessageControlKHR\x00"
+		}
+		gpDebugMessageControlKHR = (C.GPDEBUGMESSAGECONTROLKHR)(getProcAddr(name))
+	}
+	{
+		name := "glDebugMessageInsert"
+		if terminated {
+			name = "glDebugMessageInsert\x00"
+		}
+		gpDebugMessageInsert = (C.GPDEBUGMESSAGEINSERT)(getProcAddr(name))
+		if gpDebugMessageInsert == nil && firstMissing == "" {
+			firstMissing = "glDebugMessageInsert"
+		}
+	}
+	{
+		name := "glDebugMessageInsertKHR"
+		if terminated {
+			name = "glDebugMessageInsertKHR\x00"
+		}
+		gpDebugMessageInsertKHR = (C.GPDEBUGMESSAGEINSERTKHR)(getProcAddr(name))
+	}
+	{
+		name := "glDeleteBuffers"
+		if terminated {
+			name = "glDeleteBuffers\x00"
+		}
+		gpDeleteBuffers = (C.GPDELETEBUFFERS)(getProcAddr(name))
+		if gpDeleteBuffers == nil && firstMissing == "" {
+			firstMissing = "glDeleteBuffers"
+		}
+	}
+	{
+		name := "glDeleteFencesNV"
+		if terminated {
+			name = "glDeleteFencesNV\x00"
+		}
+		gpDeleteFencesNV = (C.GPDELETEFENCESNV)(getProcAddr(name))
+	}
+	{
+		name := "glDeleteFramebuffers"
+		if terminated {
+			name = "glDeleteFramebuffers\x00"
+		}
+		gpDeleteFramebuffers = (C.GPDELETEFRAMEBUFFERS)(getProcAddr(name))
+		if gpDeleteFramebuffers == nil && firstMissing == "" {
+			firstMissing = "glDeleteFramebuffers"
+		}
+	}
+	{
+		name := "glDeleteMemoryObjectsEXT"
+		if terminated {
+			name = "glDeleteMemoryObjectsEXT\x00"
+		}
+		gpDeleteMemoryObjectsEXT = (C.GPDELETEMEMORYOBJECTSEXT)(getProcAddr(name))
+	}
+	{
+		name := "glDeletePathsNV"
+		if terminated {
+			name = "glDeletePathsNV\x00"
+		}
+		gpDeletePathsNV = (C.GPDELETEPATHSNV)(getProcAddr(name))
+	}
+	{
+		name := "glDeletePerfMonitorsAMD"
+		if terminated {
+			name = "glDeletePerfMonitorsAMD\x00"
+		}
+		gpDeletePerfMonitorsAMD = (C.GPDELETEPERFMONITORSAMD)(getProcAddr(name))
+	}
+	{
+		name := "glDeletePerfQueryINTEL"
+		if terminated {
+			name = "glDeletePerfQueryINTEL\x00"
+		}
+		gpDeletePerfQueryINTEL = (C.GPDELETEPERFQUERYINTEL)(getProcAddr(name))
+	}
+	{
+		name := "glDeleteProgram"
+		if terminated {
+			name = "glDeleteProgram\x00"
+		}
+		gpDeleteProgram = (C.GPDELETEPROGRAM)(getProcAddr(name))
+		if gpDeleteProgram == nil && firstMissing == "" {
+			firstMissing = "glDeleteProgram"
+		}
+	}
+	{
+		name := "glDeleteProgramPipelines"
+		if terminated {
+			name = "glDeleteProgramPipelines\x00"
+		}
+		gpDeleteProgramPipelines = (C.GPDELETEPROGRAMPIPELINES)(getProcAddr(name))
+		if gpDeleteProgramPipelines == nil && firstMissing == "" {
+			firstMissing = "glDeleteProgramPipelines"
+		}
+	}
+	{
+		name := "glDeleteProgramPipelinesEXT"
+		if terminated {
+			name = "glDeleteProgramPipelinesEXT\x00"
+		}
+		gpDeleteProgramPipelinesEXT = (C.GPDELETEPROGRAMPIPELINESEXT)(getProcAddr(name))
+	}
+	{
+		name := "glDeleteQueries"
+		if terminated {
+			name = "glDeleteQueries\x00"
+		}
+		gpDeleteQueries = (C.GPDELETEQUERIES)(getProcAddr(name))
+		if gpDeleteQueries == nil && firstMissing == "" {
+			firstMissing = "glDeleteQueries"
+		}
+	}
+	{
+		name := "glDeleteQueriesEXT"
+		if terminated {
+			name = "glDeleteQueriesEXT\x00"
+		}
+		gpDeleteQueriesEXT = (C.GPDELETEQUERIESEXT)(getProcAddr(name))
+	}
+	{
+		name := "glDeleteRenderbuffers"
+		if terminated {
+			name = "glDeleteRenderbuffers\x00"
+		}
+		gpDeleteRenderbuffers = (C.GPDELETERENDERBUFFERS)(getProcAddr(name))
+		if gpDeleteRenderbuffers == nil && firstMissing == "" {
+			firstMissing = "glDeleteRenderbuffers"
+		}
+	}
+	{
+		name := "glDeleteSamplers"
+		if terminated {
+			name = "glDeleteSamplers\x00"
+		}
+		gpDeleteSamplers = (C.GPDELETESAMPLERS)(getProcAddr(name))
+		if gpDeleteSamplers == nil && firstMissing == "" {
+			firstMissing = "glDeleteSamplers"
+		}
+	}
+	{
+		name := "glDeleteSemaphoresEXT"
+		if terminated {
+			name = "glDeleteSemaphoresEXT\x00"
+		}
+		gpDeleteSemaphoresEXT = (C.GPDELETESEMAPHORESEXT)(getProcAddr(name))
+	}
+	{
+		name := "glDeleteShader"
+		if terminated {
+			name = "glDeleteShader\x00"
+		}
+		gpDeleteShader = (C.GPDELETESHADER)(getProcAddr(name))
+		if gpDeleteShader == nil && firstMissing == "" {
+			firstMissing = "glDeleteShader"
+		}
+	}
+	{
+		name := "glDeleteSync"
+		if terminated {
+			name = "glDeleteSync\x00"
+		}
+		gpDeleteSync = (C.GPDELETESYNC)(getProcAddr(name))
+		if gpDeleteSync == nil && firstMissing == "" {
+			firstMissing = "glDeleteSync"
+		}
+	}
+	{
+		name := "glDeleteSyncAPPLE"
+		if terminated {
+			name = "glDeleteSyncAPPLE\x00"
+		}
+		gpDeleteSyncAPPLE = (C.GPDELETESYNCAPPLE)(getProcAddr(name))
+	}
+	{
+		name := "glDeleteTextures"
+		if terminated {
+			name = "glDeleteTextures\x00"
+		}
+		gpDeleteTextures = (C.GPDELETETEXTURES)(getProcAddr(name))
+		if gpDeleteTextures == nil && firstMissing == "" {
+			firstMissing = "glDeleteTextures"
+		}
+	}
+	{
+		name := "glDeleteTransformFeedbacks"
+		if terminated {
+			name = "glDeleteTransformFeedbacks\x00"
+		}
+		gpDeleteTransformFeedbacks = (C.GPDELETETRANSFORMFEEDBACKS)(getProcAddr(name))
+		if gpDeleteTransformFeedbacks == nil && firstMissing == "" {
+			firstMissing = "glDeleteTransformFeedbacks"
+		}
+	}
+	{
+		name := "glDeleteVertexArrays"
+		if terminated {
+			name = "glDeleteVertexArrays\x00"
+		}
+		gpDeleteVertexArrays = (C.GPDELETEVERTEXARRAYS)(getProcAddr(name))
+		if gpDeleteVertexArrays == nil && firstMissing == "" {
+			firstMissing = "glDeleteVertexArrays"
+		}
+	}
+	{
+		name := "glDeleteVertexArraysOES"
+		if terminated {
+			name = "glDeleteVertexArraysOES\x00"
+		}
+		gpDeleteVertexArraysOES = (C.GPDELETEVERTEXARRAYSOES)(getProcAddr(name))
+	}
+	{
+		name := "glDepthFunc"
+		if terminated {
+			name = "glDepthFunc\x00"
+		}
+		gpDepthFunc = (C.GPDEPTHFUNC)(getProcAddr(name))
+		if gpDepthFunc == nil && firstMissing == "" {
+			firstMissing = "glDepthFunc"
+		}
+	}
+	{
+		name := "glDepthMask"
+		if terminated {
+			name = "glDepthMask\x00"
+		}
+		gpDepthMask = (C.GPDEPTHMASK)(getProcAddr(name))
+		if gpDepthMask == nil && firstMissing == "" {
+			firstMissing = "glDepthMask"
+		}
+	}
+	{
+		name := "glDepthRangeArrayfvNV"
+		if terminated {
+			name = "glDepthRangeArrayfvNV\x00"
+		}
+		gpDepthRangeArrayfvNV = (C.GPDEPTHRANGEARRAYFVNV)(getProcAddr(name))
+	}
+	{
+		name := "glDepthRangeArrayfvOES"
+		if terminated {
+			name = "glDepthRangeArrayfvOES\x00"
+		}
+		gpDepthRangeArrayfvOES = (C.GPDEPTHRANGEARRAYFVOES)(getProcAddr(name))
+	}
+	{
+		name := "glDepthRangeIndexedfNV"
+		if terminated {
+			name = "glDepthRangeIndexedfNV\x00"
+		}
+		gpDepthRangeIndexedfNV = (C.GPDEPTHRANGEINDEXEDFNV)(getProcAddr(name))
+	}
+	{
+		name := "glDepthRangeIndexedfOES"
+		if terminated {
+			name = "glDepthRangeIndexedfOES\x00"
+		}
+		gpDepthRangeIndexedfOES = (C.GPDEPTHRANGEINDEXEDFOES)(getProcAddr(name))
+	}
+	{
+		name := "glDepthRangef"
+		if terminated {
+			name = "glDepthRangef\x00"
+		}
+		gpDepthRangef = (C.GPDEPTHRANGEF)(getProcAddr(name))
+		if gpDepthRangef == nil && firstMissing == "" {
+			firstMissing = "glDepthRangef"
+		}
+	}
+	{
+		name := "glDetachShader"
+		if terminated {
+			name = "glDetachShader\x00"
+		}
+		gpDetachShader = (C.GPDETACHSHADER)(getProcAddr(name))
+		if gpDetachShader == nil && firstMissing == "" {
+			firstMissing = "glDetachShader"
+		}
+	}
+	{
+		name := "glDisable"
+		if terminated {
+			name = "glDisable\x00"
+		}
+		gpDisable = (C.GPDISABLE)(getProcAddr(name))
+		if gpDisable == nil && firstMissing == "" {
+			firstMissing = "glDisable"
+		}
+	}
+	{
+		name := "glDisableDriverControlQCOM"
+		if terminated {
+			name = "glDisableDriverControlQCOM\x00"
+		}
+		gpDisableDriverControlQCOM = (C.GPDISABLEDRIVERCONTROLQCOM)(getProcAddr(name))
+	}
+	{
+		name := "glDisableVertexAttribArray"
+		if terminated {
+			name = "glDisableVertexAttribArray\x00"
+		}
+		gpDisableVertexAttribArray = (C.GPDISABLEVERTEXATTRIBARRAY)(getProcAddr(name))
+		if gpDisableVertexAttribArray == nil && firstMissing == "" {
+			firstMissing = "glDisableVertexAttribArray"
+		}
+	}
+	{
+		name := "glDisablei"
+		if terminated {
+			name = "glDisablei\x00"
+		}
+		gpDisablei = (C.GPDISABLEI)(getProcAddr(name))
+		if gpDisablei == nil && firstMissing == "" {
+			firstMissing = "glDisablei"
+		}
+	}
+	{
+		name := "glDisableiEXT"
+		if terminated {
+			name = "glDisableiEXT\x00"
+		}
+		gpDisableiEXT = (C.GPDISABLEIEXT)(getProcAddr(name))
+	}
+	{
+		name := "glDisableiNV"
+		if terminated {
+			name = "glDisableiNV\x00"
+		}
+		gpDisableiNV = (C.GPDISABLEINV)(getProcAddr(name))
+	}
+	{
+		name := "glDisableiOES"
+		if terminated {
+			name = "glDisableiOES\x00"
+		}
+		gpDisableiOES = (C.GPDISABLEIOES)(getProcAddr(name))
+	}
+	{
+		name := "glDiscardFramebufferEXT"
+		if terminated {
+			name = "glDiscardFramebufferEXT\x00"
+		}
+		gpDiscardFramebufferEXT = (C.GPDISCARDFRAMEBUFFEREXT)(getProcAddr(name))
+	}
+	{
+		name := "glDispatchCompute"
+		if terminated {
+			name = "glDispatchCompute\x00"
+		}
+		gpDispatchCompute = (C.GPDISPATCHCOMPUTE)(getProcAddr(name))
+		if gpDispatchCompute == nil && firstMissing == "" {
+			firstMissing = "glDispatchCompute"
+		}
+	}
+	{
+		name := "glDispatchComputeIndirect"
+		if terminated {
+			name = "glDispatchComputeIndirect\x00"
+		}
+		gpDispatchComputeIndirect = (C.GPDISPATCHCOMPUTEINDIRECT)(getProcAddr(name))
+		if gpDispatchComputeIndirect == nil && firstMissing == "" {
+			firstMissing = "glDispatchComputeIndirect"
+		}
+	}
+	{
+		name := "glDrawArrays"
+		if terminated {
+			name = "glDrawArrays\x00"
+		}
+		gpDrawArrays = (C.GPDRAWARRAYS)(getProcAddr(name))
+		if gpDrawArrays == nil && firstMissing == "" {
+			firstMissing = "glDrawArrays"
+		}
+	}
+	{
+		name := "glDrawArraysIndirect"
+		if terminated {
+			name = "glDrawArraysIndirect\x00"
+		}
+		gpDrawArraysIndirect = (C.GPDRAWARRAYSINDIRECT)(getProcAddr(name))
+		if gpDrawArraysIndirect == nil && firstMissing == "" {
+			firstMissing = "glDrawArraysIndirect"
+		}
+	}
+	{
+		name := "glDrawArraysInstanced"
+		if terminated {
+			name = "glDrawArraysInstanced\x00"
+		}
+		gpDrawArraysInstanced = (C.GPDRAWARRAYSINSTANCED)(getProcAddr(name))
+		if gpDrawArraysInstanced == nil && firstMissing == "" {
+			firstMissing = "glDrawArraysInstanced"
+		}
+	}
+	{
+		name := "glDrawArraysInstancedANGLE"
+		if terminated {
+			name = "glDrawArraysInstancedANGLE\x00"
+		}
+		gpDrawArraysInstancedANGLE = (C.GPDRAWARRAYSINSTANCEDANGLE)(getProcAddr(name))
+	}
+	{
+		name := "glDrawArraysInstancedBaseInstanceEXT"
+		if terminated {
+			name = "glDrawArraysInstancedBaseInstanceEXT\x00"
+		}
+		gpDrawArraysInstancedBaseInstanceEXT = (C.GPDRAWARRAYSINSTANCEDBASEINSTANCEEXT)(getProcAddr(name))
+	}
+	{
+		name := "glDrawArraysInstancedEXT"
+		if terminated {
+			name = "glDrawArraysInstancedEXT\x00"
+		}
+		gpDrawArraysInstancedEXT = (C.GPDRAWARRAYSINSTANCEDEXT)(getProcAddr(name))
+	}
+	{
+		name := "glDrawArraysInstancedNV"
+		if terminated {
+			name = "glDrawArraysInstancedNV\x00"
+		}
+		gpDrawArraysInstancedNV = (C.GPDRAWARRAYSINSTANCEDNV)(getProcAddr(name))
+	}
+	{
+		name := "glDrawBuffers"
+		if terminated {
+			name = "glDrawBuffers\x00"
+		}
+		gpDrawBuffers = (C.GPDRAWBUFFERS)(getProcAddr(name))
+		if gpDrawBuffers == nil && firstMissing == "" {
+			firstMissing = "glDrawBuffers"
+		}
+	}
+	{
+		name := "glDrawBuffersEXT"
+		if terminated {
+			name = "glDrawBuffersEXT\x00"
+		}
+		gpDrawBuffersEXT = (C.GPDRAWBUFFERSEXT)(getProcAddr(name))
+	}
+	{
+		name := "glDrawBuffersIndexedEXT"
+		if terminated {
+			name = "glDrawBuffersIndexedEXT\x00"
+		}
+		gpDrawBuffersIndexedEXT = (C.GPDRAWBUFFERSINDEXEDEXT)(getProcAddr(name))
+	}
+	{
+		name := "glDrawBuffersNV"
+		if terminated {
+			name = "glDrawBuffersNV\x00"
+		}
+		gpDrawBuffersNV = (C.GPDRAWBUFFERSNV)(getProcAddr(name))
+	}
+	{
+		name := "glDrawElements"
+		if terminated {
+			name = "glDrawElements\x00"
+		}
+		gpDrawElements = (C.GPDRAWELEMENTS)(getProcAddr(name))
+		if gpDrawElements == nil && firstMissing == "" {
+			firstMissing = "glDrawElements"
+		}
+	}
+	{
+		name := "glDrawElementsBaseVertex"
+		if terminated {
+			name = "glDrawElementsBaseVertex\x00"
+		}
+		gpDrawElementsBaseVertex = (C.GPDRAWELEMENTSBASEVERTEX)(getProcAddr(name))
+		if gpDrawElementsBaseVertex == nil && firstMissing == "" {
+			firstMissing = "glDrawElementsBaseVertex"
+		}
+	}
+	{
+		name := "glDrawElementsBaseVertexEXT"
+		if terminated {
+			name = "glDrawElementsBaseVertexEXT\x00"
+		}
+		gpDrawElementsBaseVertexEXT = (C.GPDRAWELEMENTSBASEVERTEXEXT)(getProcAddr(name))
+	}
+	{
+		name := "glDrawElementsBaseVertexOES"
+		if terminated {
+			name = "glDrawElementsBaseVertexOES\x00"
+		}
+		gpDrawElementsBaseVertexOES = (C.GPDRAWELEMENTSBASEVERTEXOES)(getProcAddr(name))
+	}
+	{
+		name := "glDrawElementsIndirect"
+		if terminated {
+			name = "glDrawElementsIndirect\x00"
+		}
+		gpDrawElementsIndirect = (C.GPDRAWELEMENTSINDIRECT)(getProcAddr(name))
+		if gpDrawElementsIndirect == nil && firstMissing == "" {
+			firstMissing = "glDrawElementsIndirect"
+		}
+	}
+	{
+		name := "glDrawElementsInstanced"
+		if terminated {
+			name = "glDrawElementsInstanced\x00"
+		}
+		gpDrawElementsInstanced = (C.GPDRAWELEMENTSINSTANCED)(getProcAddr(name))
+		if gpDrawElementsInstanced == nil && firstMissing == "" {
+			firstMissing = "glDrawElementsInstanced"
+		}
+	}
+	{
+		name := "glDrawElementsInstancedANGLE"
+		if terminated {
+			name = "glDrawElementsInstancedANGLE\x00"
+		}
+		gpDrawElementsInstancedANGLE = (C.GPDRAWELEMENTSINSTANCEDANGLE)(getProcAddr(name))
+	}
+	{
+		name := "glDrawElementsInstancedBaseInstanceEXT"
+		if terminated {
+			name = "glDrawElementsInstancedBaseInstanceEXT\x00"
+		}
+		gpDrawElementsInstancedBaseInstanceEXT = (C.GPDRAWELEMENTSINSTANCEDBASEINSTANCEEXT)(getProcAddr(name))
+	}
+	{
+		name := "glDrawElementsInstancedBaseVertex"
+		if terminated {
+			name = "glDrawElementsInstancedBaseVertex\x00"
+		}
+		gpDrawElementsInstancedBaseVertex = (C.GPDRAWELEMENTSINSTANCEDBASEVERTEX)(getProcAddr(name))
+		if gpDrawElementsInstancedBaseVertex == nil && firstMissing == "" {
+			firstMissing = "glDrawElementsInstancedBaseVertex"
+		}
+	}
+	{
+		name := "glDrawElementsInstancedBaseVertexBaseInstanceEXT"
+		if terminated {
+			name = "glDrawElementsInstancedBaseVertexBaseInstanceEXT\x00"
+		}
+		gpDrawElementsInstancedBaseVertexBaseInstanceEXT = (C.GPDRAWELEMENTSINSTANCEDBASEVERTEXBASEINSTANCEEXT)(getProcAddr(name))
+	}
+	{
+		name := "glDrawElementsInstancedBaseVertexEXT"
+		if terminated {
+			name = "glDrawElementsInstancedBaseVertexEXT\x00"
+		}
+		gpDrawElementsInstancedBaseVertexEXT = (C.GPDRAWELEMENTSINSTANCEDBASEVERTEXEXT)(getProcAddr(name))
+	}
+	{
+		name := "glDrawElementsInstancedBaseVertexOES"
+		if terminated {
+			name = "glDrawElementsInstancedBaseVertexOES\x00"
+		}
+		gpDrawElementsInstancedBaseVertexOES = (C.GPDRAWELEMENTSINSTANCEDBASEVERTEXOES)(getProcAddr(name))
+	}
+	{
+		name := "glDrawElementsInstancedEXT"
+		if terminated {
+			name = "glDrawElementsInstancedEXT\x00"
+		}
+		gpDrawElementsInstancedEXT = (C.GPDRAWELEMENTSINSTANCEDEXT)(getProcAddr(name))
+	}
+	{
+		name := "glDrawElementsInstancedNV"
+		if terminated {
+			name = "glDrawElementsInstancedNV\x00"
+		}
+		gpDrawElementsInstancedNV = (C.GPDRAWELEMENTSINSTANCEDNV)(getProcAddr(name))
+	}
+	{
+		name := "glDrawMeshTasksEXT"
+		if terminated {
+			name = "glDrawMeshTasksEXT\x00"
+		}
+		gpDrawMeshTasksEXT = (C.GPDRAWMESHTASKSEXT)(getProcAddr(name))
+	}
+	{
+		name := "glDrawMeshTasksIndirectEXT"
+		if terminated {
+			name = "glDrawMeshTasksIndirectEXT\x00"
+		}
+		gpDrawMeshTasksIndirectEXT = (C.GPDRAWMESHTASKSINDIRECTEXT)(getProcAddr(name))
+	}
+	{
+		name := "glDrawMeshTasksIndirectNV"
+		if terminated {
+			name = "glDrawMeshTasksIndirectNV\x00"
+		}
+		gpDrawMeshTasksIndirectNV = (C.GPDRAWMESHTASKSINDIRECTNV)(getProcAddr(name))
+	}
+	{
+		name := "glDrawMeshTasksNV"
+		if terminated {
+			name = "glDrawMeshTasksNV\x00"
+		}
+		gpDrawMeshTasksNV = (C.GPDRAWMESHTASKSNV)(getProcAddr(name))
+	}
+	{
+		name := "glDrawRangeElements"
+		if terminated {
+			name = "glDrawRangeElements\x00"
+		}
+		gpDrawRangeElements = (C.GPDRAWRANGEELEMENTS)(getProcAddr(name))
+		if gpDrawRangeElements == nil && firstMissing == "" {
+			firstMissing = "glDrawRangeElements"
+		}
+	}
+	{
+		name := "glDrawRangeElementsBaseVertex"
+		if terminated {
+			name = "glDrawRangeElementsBaseVertex\x00"
+		}
+		gpDrawRangeElementsBaseVertex = (C.GPDRAWRANGEELEMENTSBASEVERTEX)(getProcAddr(name))
+		if gpDrawRangeElementsBaseVertex == nil && firstMissing == "" {
+			firstMissing = "glDrawRangeElementsBaseVertex"
+		}
+	}
+	{
+		name := "glDrawRangeElementsBaseVertexEXT"
+		if terminated {
+			name = "glDrawRangeElementsBaseVertexEXT\x00"
+		}
+		gpDrawRangeElementsBaseVertexEXT = (C.GPDRAWRANGEELEMENTSBASEVERTEXEXT)(getProcAddr(name))
+	}
+	{
+		name := "glDrawRangeElementsBaseVertexOES"
+		if terminated {
+			name = "glDrawRangeElementsBaseVertexOES\x00"
+		}
+		gpDrawRangeElementsBaseVertexOES = (C.GPDRAWRANGEELEMENTSBASEVERTEXOES)(getProcAddr(name))
+	}
+	{
+		name := "glDrawTransformFeedbackEXT"
+		if terminated {
+			name = "glDrawTransformFeedbackEXT\x00"
+		}
+		gpDrawTransformFeedbackEXT = (C.GPDRAWTRANSFORMFEEDBACKEXT)(getProcAddr(name))
+	}
+	{
+		name := "glDrawTransformFeedbackInstancedEXT"
+		if terminated {
+			name = "glDrawTransformFeedbackInstancedEXT\x00"
+		}
+		gpDrawTransformFeedbackInstancedEXT = (C.GPDRAWTRANSFORMFEEDBACKINSTANCEDEXT)(getProcAddr(name))
+	}
+	{
+		name := "glDrawVkImageNV"
+		if terminated {
+			name = "glDrawVkImageNV\x00"
+		}
+		gpDrawVkImageNV = (C.GPDRAWVKIMAGENV)(getProcAddr(name))
+	}
+	{
+		name := "glEGLImageTargetRenderbufferStorageOES"
+		if terminated {
+			name = "glEGLImageTargetRenderbufferStorageOES\x00"
+		}
+		gpEGLImageTargetRenderbufferStorageOES = (C.GPEGLIMAGETARGETRENDERBUFFERSTORAGEOES)(getProcAddr(name))
+	}
+	{
+		name := "glEGLImageTargetTexStorageEXT"
+		if terminated {
+			name = "glEGLImageTargetTexStorageEXT\x00"
+		}
+		gpEGLImageTargetTexStorageEXT = (C.GPEGLIMAGETARGETTEXSTORAGEEXT)(getProcAddr(name))
+	}
+	{
+		name := "glEGLImageTargetTexture2DOES"
+		if terminated {
+			name = "glEGLImageTargetTexture2DOES\x00"
+		}
+		gpEGLImageTargetTexture2DOES = (C.GPEGLIMAGETARGETTEXTURE2DOES)(getProcAddr(name))
+	}
+	{
+		name := "glEGLImageTargetTextureStorageEXT"
+		if terminated {
+			name = "glEGLImageTargetTextureStorageEXT\x00"
+		}
+		gpEGLImageTargetTextureStorageEXT = (C.GPEGLIMAGETARGETTEXTURESTORAGEEXT)(getProcAddr(name))
+	}
+	{
+		name := "glEnable"
+		if terminated {
+			name = "glEnable\x00"
+		}
+		gpEnable = (C.GPENABLE)(getProcAddr(name))
+		if gpEnable == nil && firstMissing == "" {
+			firstMissing = "glEnable"
+		}
+	}
+	{
+		name := "glEnableDriverControlQCOM"
+		if terminated {
+			name = "glEnableDriverControlQCOM\x00"
+		}
+		gpEnableDriverControlQCOM = (C.GPENABLEDRIVERCONTROLQCOM)(getProcAddr(name))
+	}
+	{
+		name := "glEnableVertexAttribArray"
+		if terminated {
+			name = "glEnableVertexAttribArray\x00"
+		}
+		gpEnableVertexAttribArray = (C.GPENABLEVERTEXATTRIBARRAY)(getProcAddr(name))
+		if gpEnableVertexAttribArray == nil && firstMissing == "" {
+			firstMissing = "glEnableVertexAttribArray"
+		}
+	}
+	{
+		name := "glEnablei"
+		if terminated {
+			name = "glEnablei\x00"
+		}
+		gpEnablei = (C.GPENABLEI)(getProcAddr(name))
+		if gpEnablei == nil && firstMissing == "" {
+			firstMissing = "glEnablei"
+		}
+	}
+	{
+		name := "glEnableiEXT"
+		if terminated {
+			name = "glEnableiEXT\x00"
+		}
+		gpEnableiEXT = (C.GPENABLEIEXT)(getProcAddr(name))
+	}
+	{
+		name := "glEnableiNV"
+		if terminated {
+			name = "glEnableiNV\x00"
+		}
+		gpEnableiNV = (C.GPENABLEINV)(getProcAddr(name))
+	}
+	{
+		name := "glEnableiOES"
+		if terminated {
+			name = "glEnableiOES\x00"
+		}
+		gpEnableiOES = (C.GPENABLEIOES)(getProcAddr(name))
+	}
+	{
+		name := "glEndConditionalRenderNV"
+		if terminated {
+			name = "glEndConditionalRenderNV\x00"
+		}
+		gpEndConditionalRenderNV = (C.GPENDCONDITIONALRENDERNV)(getProcAddr(name))
+	}
+	{
+		name := "glEndPerfMonitorAMD"
+		if terminated {
+			name = "glEndPerfMonitorAMD\x00"
+		}
+		gpEndPerfMonitorAMD = (C.GPENDPERFMONITORAMD)(getProcAddr(name))
+	}
+	{
+		name := "glEndPerfQueryINTEL"
+		if terminated {
+			name = "glEndPerfQueryINTEL\x00"
+		}
+		gpEndPerfQueryINTEL = (C.GPENDPERFQUERYINTEL)(getProcAddr(name))
+	}
+	{
+		name := "glEndQuery"
+		if terminated {
+			name = "glEndQuery\x00"
+		}
+		gpEndQuery = (C.GPENDQUERY)(getProcAddr(name))
+		if gpEndQuery == nil && firstMissing == "" {
+			firstMissing = "glEndQuery"
+		}
+	}
+	{
+		name := "glEndQueryEXT"
+		if terminated {
+			name = "glEndQueryEXT\x00"
+		}
+		gpEndQueryEXT = (C.GPENDQUERYEXT)(getProcAddr(name))
+	}
+	{
+		name := "glEndTilingQCOM"
+		if terminated {
+			name = "glEndTilingQCOM\x00"
+		}
+		gpEndTilingQCOM = (C.GPENDTILINGQCOM)(getProcAddr(name))
+	}
+	{
+		name := "glEndTransformFeedback"
+		if terminated {
+			name = "glEndTransformFeedback\x00"
+		}
+		gpEndTransformFeedback = (C.GPENDTRANSFORMFEEDBACK)(getProcAddr(name))
+		if gpEndTransformFeedback == nil && firstMissing == "" {
+			firstMissing = "glEndTransformFeedback"
+		}
+	}
+	{
+		name := "glExtGetBufferPointervQCOM"
+		if terminated {
+			name = "glExtGetBufferPointervQCOM\x00"
+		}
+		gpExtGetBufferPointervQCOM = (C.GPEXTGETBUFFERPOINTERVQCOM)(getProcAddr(name))
+	}
+	{
+		name := "glExtGetBuffersQCOM"
+		if terminated {
+			name = "glExtGetBuffersQCOM\x00"
+		}
+		gpExtGetBuffersQCOM = (C.GPEXTGETBUFFERSQCOM)(getProcAddr(name))
+	}
+	{
+		name := "glExtGetFramebuffersQCOM"
+		if terminated {
+			name = "glExtGetFramebuffersQCOM\x00"
+		}
+		gpExtGetFramebuffersQCOM = (C.GPEXTGETFRAMEBUFFERSQCOM)(getProcAddr(name))
+	}
+	{
+		name := "glExtGetProgramBinarySourceQCOM"
+		if terminated {
+			name = "glExtGetProgramBinarySourceQCOM\x00"
+		}
+		gpExtGetProgramBinarySourceQCOM = (C.GPEXTGETPROGRAMBINARYSOURCEQCOM)(getProcAddr(name))
+	}
+	{
+		name := "glExtGetProgramsQCOM"
+		if terminated {
+			name = "glExtGetProgramsQCOM\x00"
+		}
+		gpExtGetProgramsQCOM = (C.GPEXTGETPROGRAMSQCOM)(getProcAddr(name))
+	}
+	{
+		name := "glExtGetRenderbuffersQCOM"
+		if terminated {
+			name = "glExtGetRenderbuffersQCOM\x00"
+		}
+		gpExtGetRenderbuffersQCOM = (C.GPEXTGETRENDERBUFFERSQCOM)(getProcAddr(name))
+	}
+	{
+		name := "glExtGetShadersQCOM"
+		if terminated {
+			name = "glExtGetShadersQCOM\x00"
+		}
+		gpExtGetShadersQCOM = (C.GPEXTGETSHADERSQCOM)(getProcAddr(name))
+	}
+	{
+		name := "glExtGetTexLevelParameterivQCOM"
+		if terminated {
+			name = "glExtGetTexLevelParameterivQCOM\x00"
+		}
+		gpExtGetTexLevelParameterivQCOM = (C.GPEXTGETTEXLEVELPARAMETERIVQCOM)(getProcAddr(name))
+	}
+	{
+		name := "glExtGetTexSubImageQCOM"
+		if terminated {
+			name = "glExtGetTexSubImageQCOM\x00"
+		}
+		gpExtGetTexSubImageQCOM = (C.GPEXTGETTEXSUBIMAGEQCOM)(getProcAddr(name))
+	}
+	{
+		name := "glExtGetTexturesQCOM"
+		if terminated {
+			name = "glExtGetTexturesQCOM\x00"
+		}
+		gpExtGetTexturesQCOM = (C.GPEXTGETTEXTURESQCOM)(getProcAddr(name))
+	}
+	{
+		name := "glExtIsProgramBinaryQCOM"
+		if terminated {
+			name = "glExtIsProgramBinaryQCOM\x00"
+		}
+		gpExtIsProgramBinaryQCOM = (C.GPEXTISPROGRAMBINARYQCOM)(getProcAddr(name))
+	}
+	{
+		name := "glExtTexObjectStateOverrideiQCOM"
+		if terminated {
+			name = "glExtTexObjectStateOverrideiQCOM\x00"
+		}
+		gpExtTexObjectStateOverrideiQCOM = (C.GPEXTTEXOBJECTSTATEOVERRIDEIQCOM)(getProcAddr(name))
+	}
+	{
+		name := "glExtrapolateTex2DQCOM"
+		if terminated {
+			name = "glExtrapolateTex2DQCOM\x00"
+		}
+		gpExtrapolateTex2DQCOM = (C.GPEXTRAPOLATETEX2DQCOM)(getProcAddr(name))
+	}
+	{
+		name := "glFenceSync"
+		if terminated {
+			name = "glFenceSync\x00"
+		}
+		gpFenceSync = (C.GPFENCESYNC)(getProcAddr(name))
+		if gpFenceSync == nil && firstMissing == "" {
+			firstMissing = "glFenceSync"
+		}
+	}
+	{
+		name := "glFenceSyncAPPLE"
+		if terminated {
+			name = "glFenceSyncAPPLE\x00"
+		}
+		gpFenceSyncAPPLE = (C.GPFENCESYNCAPPLE)(getProcAddr(name))
+	}
+	{
+		name := "glFinish"
+		if terminated {
+			name = "glFinish\x00"
+		}
+		gpFinish = (C.GPFINISH)(getProcAddr(name))
+		if gpFinish == nil && firstMissing == "" {
+			firstMissing = "glFinish"
+		}
+	}
+	{
+		name := "glFinishFenceNV"
+		if terminated {
+			name = "glFinishFenceNV\x00"
+		}
+		gpFinishFenceNV = (C.GPFINISHFENCENV)(getProcAddr(name))
+	}
+	{
+		name := "glFlush"
+		if terminated {
+			name = "glFlush\x00"
+		}
+		gpFlush = (C.GPFLUSH)(getProcAddr(name))
+		if gpFlush == nil && firstMissing == "" {
+			firstMissing = "glFlush"
+		}
+	}
+	{
+		name := "glFlushMappedBufferRange"
+		if terminated {
+			name = "glFlushMappedBufferRange\x00"
+		}
+		gpFlushMappedBufferRange = (C.GPFLUSHMAPPEDBUFFERRANGE)(getProcAddr(name))
+		if gpFlushMappedBufferRange == nil && firstMissing == "" {
+			firstMissing = "glFlushMappedBufferRange"
+		}
+	}
+	{
+		name := "glFlushMappedBufferRangeEXT"
+		if terminated {
+			name = "glFlushMappedBufferRangeEXT\x00"
+		}
+		gpFlushMappedBufferRangeEXT = (C.GPFLUSHMAPPEDBUFFERRANGEEXT)(getProcAddr(name))
+	}
+	{
+		name := "glFragmentCoverageColorNV"
+		if terminated {
+			name = "glFragmentCoverageColorNV\x00"
+		}
+		gpFragmentCoverageColorNV = (C.GPFRAGMENTCOVERAGECOLORNV)(getProcAddr(name))
+	}
+	{
+		name := "glFramebufferFetchBarrierEXT"
+		if terminated {
+			name = "glFramebufferFetchBarrierEXT\x00"
+		}
+		gpFramebufferFetchBarrierEXT = (C.GPFRAMEBUFFERFETCHBARRIEREXT)(getProcAddr(name))
+	}
+	{
+		name := "glFramebufferFetchBarrierQCOM"
+		if terminated {
+			name = "glFramebufferFetchBarrierQCOM\x00"
+		}
+		gpFramebufferFetchBarrierQCOM = (C.GPFRAMEBUFFERFETCHBARRIERQCOM)(getProcAddr(name))
+	}
+	{
+		name := "glFramebufferFoveationConfigQCOM"
+		if terminated {
+			name = "glFramebufferFoveationConfigQCOM\x00"
+		}
+		gpFramebufferFoveationConfigQCOM = (C.GPFRAMEBUFFERFOVEATIONCONFIGQCOM)(getProcAddr(name))
+	}
+	{
+		name := "glFramebufferFoveationParametersQCOM"
+		if terminated {
+			name = "glFramebufferFoveationParametersQCOM\x00"
+		}
+		gpFramebufferFoveationParametersQCOM = (C.GPFRAMEBUFFERFOVEATIONPARAMETERSQCOM)(getProcAddr(name))
+	}
+	{
+		name := "glFramebufferParameteri"
+		if terminated {
+			name = "glFramebufferParameteri\x00"
+		}
+		gpFramebufferParameteri = (C.GPFRAMEBUFFERPARAMETERI)(getProcAddr(name))
+		if gpFramebufferParameteri == nil && firstMissing == "" {
+			firstMissing = "glFramebufferParameteri"
+		}
+	}
+	{
+		name := "glFramebufferParameteriMESA"
+		if terminated {
+			name = "glFramebufferParameteriMESA\x00"
+		}
+		gpFramebufferParameteriMESA = (C.GPFRAMEBUFFERPARAMETERIMESA)(getProcAddr(name))
+	}
+	{
+		name := "glFramebufferPixelLocalStorageSizeEXT"
+		if terminated {
+			name = "glFramebufferPixelLocalStorageSizeEXT\x00"
+		}
+		gpFramebufferPixelLocalStorageSizeEXT = (C.GPFRAMEBUFFERPIXELLOCALSTORAGESIZEEXT)(getProcAddr(name))
+	}
+	{
+		name := "glFramebufferRenderbuffer"
+		if terminated {
+			name = "glFramebufferRenderbuffer\x00"
+		}
+		gpFramebufferRenderbuffer = (C.GPFRAMEBUFFERRENDERBUFFER)(getProcAddr(name))
+		if gpFramebufferRenderbuffer == nil && firstMissing == "" {
+			firstMissing = "glFramebufferRenderbuffer"
+		}
+	}
+	{
+		name := "glFramebufferSampleLocationsfvNV"
+		if terminated {
+			name = "glFramebufferSampleLocationsfvNV\x00"
+		}
+		gpFramebufferSampleLocationsfvNV = (C.GPFRAMEBUFFERSAMPLELOCATIONSFVNV)(getProcAddr(name))
+	}
+	{
+		name := "glFramebufferShadingRateEXT"
+		if terminated {
+			name = "glFramebufferShadingRateEXT\x00"
+		}
+		gpFramebufferShadingRateEXT = (C.GPFRAMEBUFFERSHADINGRATEEXT)(getProcAddr(name))
+	}
+	{
+		name := "glFramebufferTexture"
+		if terminated {
+			name = "glFramebufferTexture\x00"
+		}
+		gpFramebufferTexture = (C.GPFRAMEBUFFERTEXTURE)(getProcAddr(name))
+		if gpFramebufferTexture == nil && firstMissing == "" {
+			firstMissing = "glFramebufferTexture"
+		}
+	}
+	{
+		name := "glFramebufferTexture2D"
+		if terminated {
+			name = "glFramebufferTexture2D\x00"
+		}
+		gpFramebufferTexture2D = (C.GPFRAMEBUFFERTEXTURE2D)(getProcAddr(name))
+		if gpFramebufferTexture2D == nil && firstMissing == "" {
+			firstMissing = "glFramebufferTexture2D"
+		}
+	}
+	{
+		name := "glFramebufferTexture2DDownsampleIMG"
+		if terminated {
+			name = "glFramebufferTexture2DDownsampleIMG\x00"
+		}
+		gpFramebufferTexture2DDownsampleIMG = (C.GPFRAMEBUFFERTEXTURE2DDOWNSAMPLEIMG)(getProcAddr(name))
+	}
+	{
+		name := "glFramebufferTexture2DMultisampleEXT"
+		if terminated {
+			name = "glFramebufferTexture2DMultisampleEXT\x00"
+		}
+		gpFramebufferTexture2DMultisampleEXT = (C.GPFRAMEBUFFERTEXTURE2DMULTISAMPLEEXT)(getProcAddr(name))
+	}
+	{
+		name := "glFramebufferTexture2DMultisampleIMG"
+		if terminated {
+			name = "glFramebufferTexture2DMultisampleIMG\x00"
+		}
+		gpFramebufferTexture2DMultisampleIMG = (C.GPFRAMEBUFFERTEXTURE2DMULTISAMPLEIMG)(getProcAddr(name))
+	}
+	{
+		name := "glFramebufferTexture3DOES"
+		if terminated {
+			name = "glFramebufferTexture3DOES\x00"
+		}
+		gpFramebufferTexture3DOES = (C.GPFRAMEBUFFERTEXTURE3DOES)(getProcAddr(name))
+	}
+	{
+		name := "glFramebufferTextureEXT"
+		if terminated {
+			name = "glFramebufferTextureEXT\x00"
+		}
+		gpFramebufferTextureEXT = (C.GPFRAMEBUFFERTEXTUREEXT)(getProcAddr(name))
+	}
+	{
+		name := "glFramebufferTextureLayer"
+		if terminated {
+			name = "glFramebufferTextureLayer\x00"
+		}
+		gpFramebufferTextureLayer = (C.GPFRAMEBUFFERTEXTURELAYER)(getProcAddr(name))
+		if gpFramebufferTextureLayer == nil && firstMissing == "" {
+			firstMissing = "glFramebufferTextureLayer"
+		}
+	}
+	{
+		name := "glFramebufferTextureLayerDownsampleIMG"
+		if terminated {
+			name = "glFramebufferTextureLayerDownsampleIMG\x00"
+		}
+		gpFramebufferTextureLayerDownsampleIMG = (C.GPFRAMEBUFFERTEXTURELAYERDOWNSAMPLEIMG)(getProcAddr(name))
+	}
+	{
+		name := "glFramebufferTextureMultisampleMultiviewOVR"
+		if terminated {
+			name = "glFramebufferTextureMultisampleMultiviewOVR\x00"
+		}
+		gpFramebufferTextureMultisampleMultiviewOVR = (C.GPFRAMEBUFFERTEXTUREMULTISAMPLEMULTIVIEWOVR)(getProcAddr(name))
+	}
+	{
+		name := "glFramebufferTextureMultiviewOVR"
+		if terminated {
+			name = "glFramebufferTextureMultiviewOVR\x00"
+		}
+		gpFramebufferTextureMultiviewOVR = (C.GPFRAMEBUFFERTEXTUREMULTIVIEWOVR)(getProcAddr(name))
+	}
+	{
+		name := "glFramebufferTextureOES"
+		if terminated {
+			name = "glFramebufferTextureOES\x00"
+		}
+		gpFramebufferTextureOES = (C.GPFRAMEBUFFERTEXTUREOES)(getProcAddr(name))
+	}
+	{
+		name := "glFrontFace"
+		if terminated {
+			name = "glFrontFace\x00"
+		}
+		gpFrontFace = (C.GPFRONTFACE)(getProcAddr(name))
+		if gpFrontFace == nil && firstMissing == "" {
+			firstMissing = "glFrontFace"
+		}
+	}
+	{
+		name := "glGenBuffers"
+		if terminated {
+			name = "glGenBuffers\x00"
+		}
+		gpGenBuffers = (C.GPGENBUFFERS)(getProcAddr(name))
+		if gpGenBuffers == nil && firstMissing == "" {
+			firstMissing = "glGenBuffers"
+		}
+	}
+	{
+		name := "glGenFencesNV"
+		if terminated {
+			name = "glGenFencesNV\x00"
+		}
+		gpGenFencesNV = (C.GPGENFENCESNV)(getProcAddr(name))
+	}
+	{
+		name := "glGenFramebuffers"
+		if terminated {
+			name = "glGenFramebuffers\x00"
+		}
+		gpGenFramebuffers = (C.GPGENFRAMEBUFFERS)(getProcAddr(name))
+		if gpGenFramebuffers == nil && firstMissing == "" {
+			firstMissing = "glGenFramebuffers"
+		}
+	}
+	{
+		name := "glGenPathsNV"
+		if terminated {
+			name = "glGenPathsNV\x00"
+		}
+		gpGenPathsNV = (C.GPGENPATHSNV)(getProcAddr(name))
+	}
+	{
+		name := "glGenPerfMonitorsAMD"
+		if terminated {
+			name = "glGenPerfMonitorsAMD\x00"
+		}
+		gpGenPerfMonitorsAMD = (C.GPGENPERFMONITORSAMD)(getProcAddr(name))
+	}
+	{
+		name := "glGenProgramPipelines"
+		if terminated {
+			name = "glGenProgramPipelines\x00"
+		}
+		gpGenProgramPipelines = (C.GPGENPROGRAMPIPELINES)(getProcAddr(name))
+		if gpGenProgramPipelines == nil && firstMissing == "" {
+			firstMissing = "glGenProgramPipelines"
+		}
+	}
+	{
+		name := "glGenProgramPipelinesEXT"
+		if terminated {
+			name = "glGenProgramPipelinesEXT\x00"
+		}
+		gpGenProgramPipelinesEXT = (C.GPGENPROGRAMPIPELINESEXT)(getProcAddr(name))
+	}
+	{
+		name := "glGenQueries"
+		if terminated {
+			name = "glGenQueries\x00"
+		}
+		gpGenQueries = (C.GPGENQUERIES)(getProcAddr(name))
+		if gpGenQueries == nil && firstMissing == "" {
+			firstMissing = "glGenQueries"
+		}
+	}
+	{
+		name := "glGenQueriesEXT"
+		if terminated {
+			name = "glGenQueriesEXT\x00"
+		}
+		gpGenQueriesEXT = (C.GPGENQUERIESEXT)(getProcAddr(name))
+	}
+	{
+		name := "glGenRenderbuffers"
+		if terminated {
+			name = "glGenRenderbuffers\x00"
+		}
+		gpGenRenderbuffers = (C.GPGENRENDERBUFFERS)(getProcAddr(name))
+		if gpGenRenderbuffers == nil && firstMissing == "" {
+			firstMissing = "glGenRenderbuffers"
+		}
+	}
+	{
+		name := "glGenSamplers"
+		if terminated {
+			name = "glGenSamplers\x00"
+		}
+		gpGenSamplers = (C.GPGENSAMPLERS)(getProcAddr(name))
+		if gpGenSamplers == nil && firstMissing == "" {
+			firstMissing = "glGenSamplers"
+		}
+	}
+	{
+		name := "glGenSemaphoresEXT"
+		if terminated {
+			name = "glGenSemaphoresEXT\x00"
+		}
+		gpGenSemaphoresEXT = (C.GPGENSEMAPHORESEXT)(getProcAddr(name))
+	}
+	{
+		name := "glGenTextures"
+		if terminated {
+			name = "glGenTextures\x00"
+		}
+		gpGenTextures = (C.GPGENTEXTURES)(getProcAddr(name))
+		if gpGenTextures == nil && firstMissing == "" {
+			firstMissing = "glGenTextures"
+		}
+	}
+	{
+		name := "glGenTransformFeedbacks"
+		if terminated {
+			name = "glGenTransformFeedbacks\x00"
+		}
+		gpGenTransformFeedbacks = (C.GPGENTRANSFORMFEEDBACKS)(getProcAddr(name))
+		if gpGenTransformFeedbacks == nil && firstMissing == "" {
+			firstMissing = "glGenTransformFeedbacks"
+		}
+	}
+	{
+		name := "glGenVertexArrays"
+		if terminated {
+			name = "glGenVertexArrays\x00"
+		}
+		gpGenVertexArrays = (C.GPGENVERTEXARRAYS)(getProcAddr(name))
+		if gpGenVertexArrays == nil && firstMissing == "" {
+			firstMissing = "glGenVertexArrays"
+		}
+	}
+	{
+		name := "glGenVertexArraysOES"
+		if terminated {
+			name = "glGenVertexArraysOES\x00"
+		}
+		gpGenVertexArraysOES = (C.GPGENVERTEXARRAYSOES)(getProcAddr(name))
+	}
+	{
+		name := "glGenerateMipmap"
+		if terminated {
+			name = "glGenerateMipmap\x00"
+		}
+		gpGenerateMipmap = (C.GPGENERATEMIPMAP)(getProcAddr(name))
+		if gpGenerateMipmap == nil && firstMissing == "" {
+			firstMissing = "glGenerateMipmap"
+		}
+	}
+	{
+		name := "glGetActiveAttrib"
+		if terminated {
+			name = "glGetActiveAttrib\x00"
+		}
+		gpGetActiveAttrib = (C.GPGETACTIVEATTRIB)(getProcAddr(name))
+		if gpGetActiveAttrib == nil && firstMissing == "" {
+			firstMissing = "glGetActiveAttrib"
+		}
+	}
+	{
+		name := "glGetActiveUniform"
+		if terminated {
+			name = "glGetActiveUniform\x00"
+		}
+		gpGetActiveUniform = (C.GPGETACTIVEUNIFORM)(getProcAddr(name))
+		if gpGetActiveUniform == nil && firstMissing == "" {
+			firstMissing = "glGetActiveUniform"
+		}
+	}
+	{
+		name := "glGetActiveUniformBlockName"
+		if terminated {
+			name = "glGetActiveUniformBlockName\x00"
+		}
+		gpGetActiveUniformBlockName = (C.GPGETACTIVEUNIFORMBLOCKNAME)(getProcAddr(name))
+		if gpGetActiveUniformBlockName == nil && firstMissing == "" {
+			firstMissing = "glGetActiveUniformBlockName"
+		}
+	}
+	{
+		name := "glGetActiveUniformBlockiv"
+		if terminated {
+			name = "glGetActiveUniformBlockiv\x00"
+		}
+		gpGetActiveUniformBlockiv = (C.GPGETACTIVEUNIFORMBLOCKIV)(getProcAddr(name))
+		if gpGetActiveUniformBlockiv == nil && firstMissing == "" {
+			firstMissing = "glGetActiveUniformBlockiv"
+		}
+	}
+	{
+		name := "glGetActiveUniformsiv"
+		if terminated {
+			name = "glGetActiveUniformsiv\x00"
+		}
+		gpGetActiveUniformsiv = (C.GPGETACTIVEUNIFORMSIV)(getProcAddr(name))
+		if gpGetActiveUniformsiv == nil && firstMissing == "" {
+			firstMissing = "glGetActiveUniformsiv"
+		}
+	}
+	{
+		name := "glGetAttachedShaders"
+		if terminated {
+			name = "glGetAttachedShaders\x00"
+		}
+		gpGetAttachedShaders = (C.GPGETATTACHEDSHADERS)(getProcAddr(name))
+		if gpGetAttachedShaders == nil && firstMissing == "" {
+			firstMissing = "glGetAttachedShaders"
+		}
+	}
+	{
+		name := "glGetAttribLocation"
+		if terminated {
+			name = "glGetAttribLocation\x00"
+		}
+		gpGetAttribLocation = (C.GPGETATTRIBLOCATION)(getProcAddr(name))
+		if gpGetAttribLocation == nil && firstMissing == "" {
+			firstMissing = "glGetAttribLocation"
+		}
+	}
+	{
+		name := "glGetBooleani_v"
+		if terminated {
+			name = "glGetBooleani_v\x00"
+		}
+		gpGetBooleani_v = (C.GPGETBOOLEANI_V)(getProcAddr(name))
+		if gpGetBooleani_v == nil && firstMissing == "" {
+			firstMissing = "glGetBooleani_v"
+		}
+	}
+	{
+		name := "glGetBooleanv"
+		if terminated {
+			name = "glGetBooleanv\x00"
+		}
+		gpGetBooleanv = (C.GPGETBOOLEANV)(getProcAddr(name))
+		if gpGetBooleanv == nil && firstMissing == "" {
+			firstMissing = "glGetBooleanv"
+		}
+	}
+	{
+		name := "glGetBufferParameteri64v"
+		if terminated {
+			name = "glGetBufferParameteri64v\x00"
+		}
+		gpGetBufferParameteri64v = (C.GPGETBUFFERPARAMETERI64V)(getProcAddr(name))
+		if gpGetBufferParameteri64v == nil && firstMissing == "" {
+			firstMissing = "glGetBufferParameteri64v"
+		}
+	}
+	{
+		name := "glGetBufferParameteriv"
+		if terminated {
+			name = "glGetBufferParameteriv\x00"
+		}
+		gpGetBufferParameteriv = (C.GPGETBUFFERPARAMETERIV)(getProcAddr(name))
+		if gpGetBufferParameteriv == nil && firstMissing == "" {
+			firstMissing = "glGetBufferParameteriv"
+		}
+	}
+	{
+		name := "glGetBufferPointerv"
+		if terminated {
+			name = "glGetBufferPointerv\x00"
+		}
+		gpGetBufferPointerv = (C.GPGETBUFFERPOINTERV)(getProcAddr(name))
+		if gpGetBufferPointerv == nil && firstMissing == "" {
+			firstMissing = "glGetBufferPointerv"
+		}
+	}
+	{
+		name := "glGetBufferPointervOES"
+		if terminated {
+			name = "glGetBufferPointervOES\x00"
+		}
+		gpGetBufferPointervOES = (C.GPGETBUFFERPOINTERVOES)(getProcAddr(name))
+	}
+	{
+		name := "glGetCoverageModulationTableNV"
+		if terminated {
+			name = "glGetCoverageModulationTableNV\x00"
+		}
+		gpGetCoverageModulationTableNV = (C.GPGETCOVERAGEMODULATIONTABLENV)(getProcAddr(name))
+	}
+	{
+		name := "glGetDebugMessageLog"
+		if terminated {
+			name = "glGetDebugMessageLog\x00"
+		}
+		gpGetDebugMessageLog = (C.GPGETDEBUGMESSAGELOG)(getProcAddr(name))
+		if gpGetDebugMessageLog == nil && firstMissing == "" {
+			firstMissing = "glGetDebugMessageLog"
+		}
+	}
+	{
+		name := "glGetDebugMessageLogKHR"
+		if terminated {
+			name = "glGetDebugMessageLogKHR\x00"
+		}
+		gpGetDebugMessageLogKHR = (C.GPGETDEBUGMESSAGELOGKHR)(getProcAddr(name))
+	}
+	{
+		name := "glGetDriverControlStringQCOM"
+		if terminated {
+			name = "glGetDriverControlStringQCOM\x00"
+		}
+		gpGetDriverControlStringQCOM = (C.GPGETDRIVERCONTROLSTRINGQCOM)(getProcAddr(name))
+	}
+	{
+		name := "glGetDriverControlsQCOM"
+		if terminated {
+			name = "glGetDriverControlsQCOM\x00"
+		}
+		gpGetDriverControlsQCOM = (C.GPGETDRIVERCONTROLSQCOM)(getProcAddr(name))
+	}
+	{
+		name := "glGetError"
+		if terminated {
+			name = "glGetError\x00"
+		}
+		gpGetError = (C.GPGETERROR)(getProcAddr(name))
+		if gpGetError == nil && firstMissing == "" {
+			firstMissing = "glGetError"
+		}
+	}
+	{
+		name := "glGetFenceivNV"
+		if terminated {
+			name = "glGetFenceivNV\x00"
+		}
+		gpGetFenceivNV = (C.GPGETFENCEIVNV)(getProcAddr(name))
+	}
+	{
+		name := "glGetFirstPerfQueryIdINTEL"
+		if terminated {
+			name = "glGetFirstPerfQueryIdINTEL\x00"
+		}
+		gpGetFirstPerfQueryIdINTEL = (C.GPGETFIRSTPERFQUERYIDINTEL)(getProcAddr(name))
+	}
+	{
+		name := "glGetFloati_vNV"
+		if terminated {
+			name = "glGetFloati_vNV\x00"
+		}
+		gpGetFloati_vNV = (C.GPGETFLOATI_VNV)(getProcAddr(name))
+	}
+	{
+		name := "glGetFloati_vOES"
+		if terminated {
+			name = "glGetFloati_vOES\x00"
+		}
+		gpGetFloati_vOES = (C.GPGETFLOATI_VOES)(getProcAddr(name))
+	}
+	{
+		name := "glGetFloatv"
+		if terminated {
+			name = "glGetFloatv\x00"
+		}
+		gpGetFloatv = (C.GPGETFLOATV)(getProcAddr(name))
+		if gpGetFloatv == nil && firstMissing == "" {
+			firstMissing = "glGetFloatv"
+		}
+	}
+	{
+		name := "glGetFragDataIndexEXT"
+		if terminated {
+			name = "glGetFragDataIndexEXT\x00"
+		}
+		gpGetFragDataIndexEXT = (C.GPGETFRAGDATAINDEXEXT)(getProcAddr(name))
+	}
+	{
+		name := "glGetFragDataLocation"
+		if terminated {
+			name = "glGetFragDataLocation\x00"
+		}
+		gpGetFragDataLocation = (C.GPGETFRAGDATALOCATION)(getProcAddr(name))
+		if gpGetFragDataLocation == nil && firstMissing == "" {
+			firstMissing = "glGetFragDataLocation"
+		}
+	}
+	{
+		name := "glGetFragmentShadingRatesEXT"
+		if terminated {
+			name = "glGetFragmentShadingRatesEXT\x00"
+		}
+		gpGetFragmentShadingRatesEXT = (C.GPGETFRAGMENTSHADINGRATESEXT)(getProcAddr(name))
+	}
+	{
+		name := "glGetFramebufferAttachmentParameteriv"
+		if terminated {
+			name = "glGetFramebufferAttachmentParameteriv\x00"
+		}
+		gpGetFramebufferAttachmentParameteriv = (C.GPGETFRAMEBUFFERATTACHMENTPARAMETERIV)(getProcAddr(name))
+		if gpGetFramebufferAttachmentParameteriv == nil && firstMissing == "" {
+			firstMissing = "glGetFramebufferAttachmentParameteriv"
+		}
+	}
+	{
+		name := "glGetFramebufferParameteriv"
+		if terminated {
+			name = "glGetFramebufferParameteriv\x00"
+		}
+		gpGetFramebufferParameteriv = (C.GPGETFRAMEBUFFERPARAMETERIV)(getProcAddr(name))
+		if gpGetFramebufferParameteriv == nil && firstMissing == "" {
+			firstMissing = "glGetFramebufferParameteriv"
+		}
+	}
+	{
+		name := "glGetFramebufferParameterivMESA"
+		if terminated {
+			name = "glGetFramebufferParameterivMESA\x00"
+		}
+		gpGetFramebufferParameterivMESA = (C.GPGETFRAMEBUFFERPARAMETERIVMESA)(getProcAddr(name))
+	}
+	{
+		name := "glGetFramebufferPixelLocalStorageSizeEXT"
+		if terminated {
+			name = "glGetFramebufferPixelLocalStorageSizeEXT\x00"
+		}
+		gpGetFramebufferPixelLocalStorageSizeEXT = (C.GPGETFRAMEBUFFERPIXELLOCALSTORAGESIZEEXT)(getProcAddr(name))
+	}
+	{
+		name := "glGetGraphicsResetStatus"
+		if terminated {
+			name = "glGetGraphicsResetStatus\x00"
+		}
+		gpGetGraphicsResetStatus = (C.GPGETGRAPHICSRESETSTATUS)(getProcAddr(name))
+		if gpGetGraphicsResetStatus == nil && firstMissing == "" {
+			firstMissing = "glGetGraphicsResetStatus"
+		}
+	}
+	{
+		name := "glGetGraphicsResetStatusEXT"
+		if terminated {
+			name = "glGetGraphicsResetStatusEXT\x00"
+		}
+		gpGetGraphicsResetStatusEXT = (C.GPGETGRAPHICSRESETSTATUSEXT)(getProcAddr(name))
+	}
+	{
+		name := "glGetGraphicsResetStatusKHR"
+		if terminated {
+			name = "glGetGraphicsResetStatusKHR\x00"
+		}
+		gpGetGraphicsResetStatusKHR = (C.GPGETGRAPHICSRESETSTATUSKHR)(getProcAddr(name))
+	}
+	{
+		name := "glGetImageHandleNV"
+		if terminated {
+			name = "glGetImageHandleNV\x00"
+		}
+		gpGetImageHandleNV = (C.GPGETIMAGEHANDLENV)(getProcAddr(name))
+	}
+	{
+		name := "glGetInteger64i_v"
+		if terminated {
+			name = "glGetInteger64i_v\x00"
+		}
+		gpGetInteger64i_v = (C.GPGETINTEGER64I_V)(getProcAddr(name))
+		if gpGetInteger64i_v == nil && firstMissing == "" {
+			firstMissing = "glGetInteger64i_v"
+		}
+	}
+	{
+		name := "glGetInteger64v"
+		if terminated {
+			name = "glGetInteger64v\x00"
+		}
+		gpGetInteger64v = (C.GPGETINTEGER64V)(getProcAddr(name))
+		if gpGetInteger64v == nil && firstMissing == "" {
+			firstMissing = "glGetInteger64v"
+		}
+	}
+	{
+		name := "glGetInteger64vAPPLE"
+		if terminated {
+			name = "glGetInteger64vAPPLE\x00"
+		}
+		gpGetInteger64vAPPLE = (C.GPGETINTEGER64VAPPLE)(getProcAddr(name))
+	}
+	{
+		name := "glGetInteger64vEXT"
+		if terminated {
+			name = "glGetInteger64vEXT\x00"
+		}
+		gpGetInteger64vEXT = (C.GPGETINTEGER64VEXT)(getProcAddr(name))
+	}
+	{
+		name := "glGetIntegeri_v"
+		if terminated {
+			name = "glGetIntegeri_v\x00"
+		}
+		gpGetIntegeri_v = (C.GPGETINTEGERI_V)(getProcAddr(name))
+		if gpGetIntegeri_v == nil && firstMissing == "" {
+			firstMissing = "glGetIntegeri_v"
+		}
+	}
+	{
+		name := "glGetIntegeri_vEXT"
+		if terminated {
+			name = "glGetIntegeri_vEXT\x00"
+		}
+		gpGetIntegeri_vEXT = (C.GPGETINTEGERI_VEXT)(getProcAddr(name))
+	}
+	{
+		name := "glGetIntegerv"
+		if terminated {
+			name = "glGetIntegerv\x00"
+		}
+		gpGetIntegerv = (C.GPGETINTEGERV)(getProcAddr(name))
+		if gpGetIntegerv == nil && firstMissing == "" {
+			firstMissing = "glGetIntegerv"
+		}
+	}
+	{
+		name := "glGetInternalformatSampleivNV"
+		if terminated {
+			name = "glGetInternalformatSampleivNV\x00"
+		}
+		gpGetInternalformatSampleivNV = (C.GPGETINTERNALFORMATSAMPLEIVNV)(getProcAddr(name))
+	}
+	{
+		name := "glGetInternalformativ"
+		if terminated {
+			name = "glGetInternalformativ\x00"
+		}
+		gpGetInternalformativ = (C.GPGETINTERNALFORMATIV)(getProcAddr(name))
+		if gpGetInternalformativ == nil && firstMissing == "" {
+			firstMissing = "glGetInternalformativ"
+		}
+	}
+	{
+		name := "glGetMemoryObjectDetachedResourcesuivNV"
+		if terminated {
+			name = "glGetMemoryObjectDetachedResourcesuivNV\x00"
+		}
+		gpGetMemoryObjectDetachedResourcesuivNV = (C.GPGETMEMORYOBJECTDETACHEDRESOURCESUIVNV)(getProcAddr(name))
+	}
+	{
+		name := "glGetMemoryObjectParameterivEXT"
+		if terminated {
+			name = "glGetMemoryObjectParameterivEXT\x00"
+		}
+		gpGetMemoryObjectParameterivEXT = (C.GPGETMEMORYOBJECTPARAMETERIVEXT)(getProcAddr(name))
+	}
+	{
+		name := "glGetMultisamplefv"
+		if terminated {
+			name = "glGetMultisamplefv\x00"
+		}
+		gpGetMultisamplefv = (C.GPGETMULTISAMPLEFV)(getProcAddr(name))
+		if gpGetMultisamplefv == nil && firstMissing == "" {
+			firstMissing = "glGetMultisamplefv"
+		}
+	}
+	{
+		name := "glGetNextPerfQueryIdINTEL"
+		if terminated {
+			name = "glGetNextPerfQueryIdINTEL\x00"
+		}
+		gpGetNextPerfQueryIdINTEL = (C.GPGETNEXTPERFQUERYIDINTEL)(getProcAddr(name))
+	}
+	{
+		name := "glGetObjectLabel"
+		if terminated {
+			name = "glGetObjectLabel\x00"
+		}
+		gpGetObjectLabel = (C.GPGETOBJECTLABEL)(getProcAddr(name))
+		if gpGetObjectLabel == nil && firstMissing == "" {
+			firstMissing = "glGetObjectLabel"
+		}
+	}
+	{
+		name := "glGetObjectLabelEXT"
+		if terminated {
+			name = "glGetObjectLabelEXT\x00"
+		}
+		gpGetObjectLabelEXT = (C.GPGETOBJECTLABELEXT)(getProcAddr(name))
+	}
+	{
+		name := "glGetObjectLabelKHR"
+		if terminated {
+			name = "glGetObjectLabelKHR\x00"
+		}
+		gpGetObjectLabelKHR = (C.GPGETOBJECTLABELKHR)(getProcAddr(name))
+	}
+	{
+		name := "glGetObjectPtrLabel"
+		if terminated {
+			name = "glGetObjectPtrLabel\x00"
+		}
+		gpGetObjectPtrLabel = (C.GPGETOBJECTPTRLABEL)(getProcAddr(name))
+		if gpGetObjectPtrLabel == nil && firstMissing == "" {
+			firstMissing = "glGetObjectPtrLabel"
+		}
+	}
+	{
+		name := "glGetObjectPtrLabelKHR"
+		if terminated {
+			name = "glGetObjectPtrLabelKHR\x00"
+		}
+		gpGetObjectPtrLabelKHR = (C.GPGETOBJECTPTRLABELKHR)(getProcAddr(name))
+	}
+	{
+		name := "glGetPathCommandsNV"
+		if terminated {
+			name = "glGetPathCommandsNV\x00"
+		}
+		gpGetPathCommandsNV = (C.GPGETPATHCOMMANDSNV)(getProcAddr(name))
+	}
+	{
+		name := "glGetPathCoordsNV"
+		if terminated {
+			name = "glGetPathCoordsNV\x00"
+		}
+		gpGetPathCoordsNV = (C.GPGETPATHCOORDSNV)(getProcAddr(name))
+	}
+	{
+		name := "glGetPathDashArrayNV"
+		if terminated {
+			name = "glGetPathDashArrayNV\x00"
+		}
+		gpGetPathDashArrayNV = (C.GPGETPATHDASHARRAYNV)(getProcAddr(name))
+	}
+	{
+		name := "glGetPathLengthNV"
+		if terminated {
+			name = "glGetPathLengthNV\x00"
+		}
+		gpGetPathLengthNV = (C.GPGETPATHLENGTHNV)(getProcAddr(name))
+	}
+	{
+		name := "glGetPathMetricRangeNV"
+		if terminated {
+			name = "glGetPathMetricRangeNV\x00"
+		}
+		gpGetPathMetricRangeNV = (C.GPGETPATHMETRICRANGENV)(getProcAddr(name))
+	}
+	{
+		name := "glGetPathMetricsNV"
+		if terminated {
+			name = "glGetPathMetricsNV\x00"
+		}
+		gpGetPathMetricsNV = (C.GPGETPATHMETRICSNV)(getProcAddr(name))
+	}
+	{
+		name := "glGetPathParameterfvNV"
+		if terminated {
+			name = "glGetPathParameterfvNV\x00"
+		}
+		gpGetPathParameterfvNV = (C.GPGETPATHPARAMETERFVNV)(getProcAddr(name))
+	}
+	{
+		name := "glGetPathParameterivNV"
+		if terminated {
+			name = "glGetPathParameterivNV\x00"
+		}
+		gpGetPathParameterivNV = (C.GPGETPATHPARAMETERIVNV)(getProcAddr(name))
+	}
+	{
+		name := "glGetPathSpacingNV"
+		if terminated {
+			name = "glGetPathSpacingNV\x00"
+		}
+		gpGetPathSpacingNV = (C.GPGETPATHSPACINGNV)(getProcAddr(name))
+	}
+	{
+		name := "glGetPerfCounterInfoINTEL"
+		if terminated {
+			name = "glGetPerfCounterInfoINTEL\x00"
+		}
+		gpGetPerfCounterInfoINTEL = (C.GPGETPERFCOUNTERINFOINTEL)(getProcAddr(name))
+	}
+	{
+		name := "glGetPerfMonitorCounterDataAMD"
+		if terminated {
+			name = "glGetPerfMonitorCounterDataAMD\x00"
+		}
+		gpGetPerfMonitorCounterDataAMD = (C.GPGETPERFMONITORCOUNTERDATAAMD)(getProcAddr(name))
+	}
+	{
+		name := "glGetPerfMonitorCounterInfoAMD"
+		if terminated {
+			name = "glGetPerfMonitorCounterInfoAMD\x00"
+		}
+		gpGetPerfMonitorCounterInfoAMD = (C.GPGETPERFMONITORCOUNTERINFOAMD)(getProcAddr(name))
+	}
+	{
+		name := "glGetPerfMonitorCounterStringAMD"
+		if terminated {
+			name = "glGetPerfMonitorCounterStringAMD\x00"
+		}
+		gpGetPerfMonitorCounterStringAMD = (C.GPGETPERFMONITORCOUNTERSTRINGAMD)(getProcAddr(name))
+	}
+	{
+		name := "glGetPerfMonitorCountersAMD"
+		if terminated {
+			name = "glGetPerfMonitorCountersAMD\x00"
+		}
+		gpGetPerfMonitorCountersAMD = (C.GPGETPERFMONITORCOUNTERSAMD)(getProcAddr(name))
+	}
+	{
+		name := "glGetPerfMonitorGroupStringAMD"
+		if terminated {
+			name = "glGetPerfMonitorGroupStringAMD\x00"
+		}
+		gpGetPerfMonitorGroupStringAMD = (C.GPGETPERFMONITORGROUPSTRINGAMD)(getProcAddr(name))
+	}
+	{
+		name := "glGetPerfMonitorGroupsAMD"
+		if terminated {
+			name = "glGetPerfMonitorGroupsAMD\x00"
+		}
+		gpGetPerfMonitorGroupsAMD = (C.GPGETPERFMONITORGROUPSAMD)(getProcAddr(name))
+	}
+	{
+		name := "glGetPerfQueryDataINTEL"
+		if terminated {
+			name = "glGetPerfQueryDataINTEL\x00"
+		}
+		gpGetPerfQueryDataINTEL = (C.GPGETPERFQUERYDATAINTEL)(getProcAddr(name))
+	}
+	{
+		name := "glGetPerfQueryIdByNameINTEL"
+		if terminated {
+			name = "glGetPerfQueryIdByNameINTEL\x00"
+		}
+		gpGetPerfQueryIdByNameINTEL = (C.GPGETPERFQUERYIDBYNAMEINTEL)(getProcAddr(name))
+	}
+	{
+		name := "glGetPerfQueryInfoINTEL"
+		if terminated {
+			name = "glGetPerfQueryInfoINTEL\x00"
+		}
+		gpGetPerfQueryInfoINTEL = (C.GPGETPERFQUERYINFOINTEL)(getProcAddr(name))
+	}
+	{
+		name := "glGetPointerv"
+		if terminated {
+			name = "glGetPointerv\x00"
+		}
+		gpGetPointerv = (C.GPGETPOINTERV)(getProcAddr(name))
+		if gpGetPointerv == nil && firstMissing == "" {
+			firstMissing = "glGetPointerv"
+		}
+	}
+	{
+		name := "glGetPointervKHR"
+		if terminated {
+			name = "glGetPointervKHR\x00"
+		}
+		gpGetPointervKHR = (C.GPGETPOINTERVKHR)(getProcAddr(name))
+	}
+	{
+		name := "glGetProgramBinary"
+		if terminated {
+			name = "glGetProgramBinary\x00"
+		}
+		gpGetProgramBinary = (C.GPGETPROGRAMBINARY)(getProcAddr(name))
+		if gpGetProgramBinary == nil && firstMissing == "" {
+			firstMissing = "glGetProgramBinary"
+		}
+	}
+	{
+		name := "glGetProgramBinaryOES"
+		if terminated {
+			name = "glGetProgramBinaryOES\x00"
+		}
+		gpGetProgramBinaryOES = (C.GPGETPROGRAMBINARYOES)(getProcAddr(name))
+	}
+	{
+		name := "glGetProgramInfoLog"
+		if terminated {
+			name = "glGetProgramInfoLog\x00"
+		}
+		gpGetProgramInfoLog = (C.GPGETPROGRAMINFOLOG)(getProcAddr(name))
+		if gpGetProgramInfoLog == nil && firstMissing == "" {
+			firstMissing = "glGetProgramInfoLog"
+		}
+	}
+	{
+		name := "glGetProgramInterfaceiv"
+		if terminated {
+			name = "glGetProgramInterfaceiv\x00"
+		}
+		gpGetProgramInterfaceiv = (C.GPGETPROGRAMINTERFACEIV)(getProcAddr(name))
+		if gpGetProgramInterfaceiv == nil && firstMissing == "" {
+			firstMissing = "glGetProgramInterfaceiv"
+		}
+	}
+	{
+		name := "glGetProgramPipelineInfoLog"
+		if terminated {
+			name = "glGetProgramPipelineInfoLog\x00"
+		}
+		gpGetProgramPipelineInfoLog = (C.GPGETPROGRAMPIPELINEINFOLOG)(getProcAddr(name))
+		if gpGetProgramPipelineInfoLog == nil && firstMissing == "" {
+			firstMissing = "glGetProgramPipelineInfoLog"
+		}
+	}
+	{
+		name := "glGetProgramPipelineInfoLogEXT"
+		if terminated {
+			name = "glGetProgramPipelineInfoLogEXT\x00"
+		}
+		gpGetProgramPipelineInfoLogEXT = (C.GPGETPROGRAMPIPELINEINFOLOGEXT)(getProcAddr(name))
+	}
+	{
+		name := "glGetProgramPipelineiv"
+		if terminated {
+			name = "glGetProgramPipelineiv\x00"
+		}
+		gpGetProgramPipelineiv = (C.GPGETPROGRAMPIPELINEIV)(getProcAddr(name))
+		if gpGetProgramPipelineiv == nil && firstMissing == "" {
+			firstMissing = "glGetProgramPipelineiv"
+		}
+	}
+	{
+		name := "glGetProgramPipelineivEXT"
+		if terminated {
+			name = "glGetProgramPipelineivEXT\x00"
+		}
+		gpGetProgramPipelineivEXT = (C.GPGETPROGRAMPIPELINEIVEXT)(getProcAddr(name))
+	}
+	{
+		name := "glGetProgramResourceIndex"
+		if terminated {
+			name = "glGetProgramResourceIndex\x00"
+		}
+		gpGetProgramResourceIndex = (C.GPGETPROGRAMRESOURCEINDEX)(getProcAddr(name))
+		if gpGetProgramResourceIndex == nil && firstMissing == "" {
+			firstMissing = "glGetProgramResourceIndex"
+		}
+	}
+	{
+		name := "glGetProgramResourceLocation"
+		if terminated {
+			name = "glGetProgramResourceLocation\x00"
+		}
+		gpGetProgramResourceLocation = (C.GPGETPROGRAMRESOURCELOCATION)(getProcAddr(name))
+		if gpGetProgramResourceLocation == nil && firstMissing == "" {
+			firstMissing = "glGetProgramResourceLocation"
+		}
+	}
+	{
+		name := "glGetProgramResourceLocationIndexEXT"
+		if terminated {
+			name = "glGetProgramResourceLocationIndexEXT\x00"
+		}
+		gpGetProgramResourceLocationIndexEXT = (C.GPGETPROGRAMRESOURCELOCATIONINDEXEXT)(getProcAddr(name))
+	}
+	{
+		name := "glGetProgramResourceName"
+		if terminated {
+			name = "glGetProgramResourceName\x00"
+		}
+		gpGetProgramResourceName = (C.GPGETPROGRAMRESOURCENAME)(getProcAddr(name))
+		if gpGetProgramResourceName == nil && firstMissing == "" {
+			firstMissing = "glGetProgramResourceName"
+		}
+	}
+	{
+		name := "glGetProgramResourcefvNV"
+		if terminated {
+			name = "glGetProgramResourcefvNV\x00"
+		}
+		gpGetProgramResourcefvNV = (C.GPGETPROGRAMRESOURCEFVNV)(getProcAddr(name))
+	}
+	{
+		name := "glGetProgramResourceiv"
+		if terminated {
+			name = "glGetProgramResourceiv\x00"
+		}
+		gpGetProgramResourceiv = (C.GPGETPROGRAMRESOURCEIV)(getProcAddr(name))
+		if gpGetProgramResourceiv == nil && firstMissing == "" {
+			firstMissing = "glGetProgramResourceiv"
+		}
+	}
+	{
+		name := "glGetProgramiv"
+		if terminated {
+			name = "glGetProgramiv\x00"
+		}
+		gpGetProgramiv = (C.GPGETPROGRAMIV)(getProcAddr(name))
+		if gpGetProgramiv == nil && firstMissing == "" {
+			firstMissing = "glGetProgramiv"
+		}
+	}
+	{
+		name := "glGetQueryObjecti64vEXT"
+		if terminated {
+			name = "glGetQueryObjecti64vEXT\x00"
+		}
+		gpGetQueryObjecti64vEXT = (C.GPGETQUERYOBJECTI64VEXT)(getProcAddr(name))
+	}
+	{
+		name := "glGetQueryObjectivEXT"
+		if terminated {
+			name = "glGetQueryObjectivEXT\x00"
+		}
+		gpGetQueryObjectivEXT = (C.GPGETQUERYOBJECTIVEXT)(getProcAddr(name))
+	}
+	{
+		name := "glGetQueryObjectui64vEXT"
+		if terminated {
+			name = "glGetQueryObjectui64vEXT\x00"
+		}
+		gpGetQueryObjectui64vEXT = (C.GPGETQUERYOBJECTUI64VEXT)(getProcAddr(name))
+	}
+	{
+		name := "glGetQueryObjectuiv"
+		if terminated {
+			name = "glGetQueryObjectuiv\x00"
+		}
+		gpGetQueryObjectuiv = (C.GPGETQUERYOBJECTUIV)(getProcAddr(name))
+		if gpGetQueryObjectuiv == nil && firstMissing == "" {
+			firstMissing = "glGetQueryObjectuiv"
+		}
+	}
+	{
+		name := "glGetQueryObjectuivEXT"
+		if terminated {
+			name = "glGetQueryObjectuivEXT\x00"
+		}
+		gpGetQueryObjectuivEXT = (C.GPGETQUERYOBJECTUIVEXT)(getProcAddr(name))
+	}
+	{
+		name := "glGetQueryiv"
+		if terminated {
+			name = "glGetQueryiv\x00"
+		}
+		gpGetQueryiv = (C.GPGETQUERYIV)(getProcAddr(name))
+		if gpGetQueryiv == nil && firstMissing == "" {
+			firstMissing = "glGetQueryiv"
+		}
+	}
+	{
+		name := "glGetQueryivEXT"
+		if terminated {
+			name = "glGetQueryivEXT\x00"
+		}
+		gpGetQueryivEXT = (C.GPGETQUERYIVEXT)(getProcAddr(name))
+	}
+	{
+		name := "glGetRenderbufferParameteriv"
+		if terminated {
+			name = "glGetRenderbufferParameteriv\x00"
+		}
+		gpGetRenderbufferParameteriv = (C.GPGETRENDERBUFFERPARAMETERIV)(getProcAddr(name))
+		if gpGetRenderbufferParameteriv == nil && firstMissing == "" {
+			firstMissing = "glGetRenderbufferParameteriv"
+		}
+	}
+	{
+		name := "glGetSamplerParameterIiv"
+		if terminated {
+			name = "glGetSamplerParameterIiv\x00"
+		}
+		gpGetSamplerParameterIiv = (C.GPGETSAMPLERPARAMETERIIV)(getProcAddr(name))
+		if gpGetSamplerParameterIiv == nil && firstMissing == "" {
+			firstMissing = "glGetSamplerParameterIiv"
+		}
+	}
+	{
+		name := "glGetSamplerParameterIivEXT"
+		if terminated {
+			name = "glGetSamplerParameterIivEXT\x00"
+		}
+		gpGetSamplerParameterIivEXT = (C.GPGETSAMPLERPARAMETERIIVEXT)(getProcAddr(name))
+	}
+	{
+		name := "glGetSamplerParameterIivOES"
+		if terminated {
+			name = "glGetSamplerParameterIivOES\x00"
+		}
+		gpGetSamplerParameterIivOES = (C.GPGETSAMPLERPARAMETERIIVOES)(getProcAddr(name))
+	}
+	{
+		name := "glGetSamplerParameterIuiv"
+		if terminated {
+			name = "glGetSamplerParameterIuiv\x00"
+		}
+		gpGetSamplerParameterIuiv = (C.GPGETSAMPLERPARAMETERIUIV)(getProcAddr(name))
+		if gpGetSamplerParameterIuiv == nil && firstMissing == "" {
+			firstMissing = "glGetSamplerParameterIuiv"
+		}
+	}
+	{
+		name := "glGetSamplerParameterIuivEXT"
+		if terminated {
+			name = "glGetSamplerParameterIuivEXT\x00"
+		}
+		gpGetSamplerParameterIuivEXT = (C.GPGETSAMPLERPARAMETERIUIVEXT)(getProcAddr(name))
+	}
+	{
+		name := "glGetSamplerParameterIuivOES"
+		if terminated {
+			name = "glGetSamplerParameterIuivOES\x00"
+		}
+		gpGetSamplerParameterIuivOES = (C.GPGETSAMPLERPARAMETERIUIVOES)(getProcAddr(name))
+	}
+	{
+		name := "glGetSamplerParameterfv"
+		if terminated {
+			name = "glGetSamplerParameterfv\x00"
+		}
+		gpGetSamplerParameterfv = (C.GPGETSAMPLERPARAMETERFV)(getProcAddr(name))
+		if gpGetSamplerParameterfv == nil && firstMissing == "" {
+			firstMissing = "glGetSamplerParameterfv"
+		}
+	}
+	{
+		name := "glGetSamplerParameteriv"
+		if terminated {
+			name = "glGetSamplerParameteriv\x00"
+		}
+		gpGetSamplerParameteriv = (C.GPGETSAMPLERPARAMETERIV)(getProcAddr(name))
+		if gpGetSamplerParameteriv == nil && firstMissing == "" {
+			firstMissing = "glGetSamplerParameteriv"
+		}
+	}
+	{
+		name := "glGetSemaphoreParameterivNV"
+		if terminated {
+			name = "glGetSemaphoreParameterivNV\x00"
+		}
+		gpGetSemaphoreParameterivNV = (C.GPGETSEMAPHOREPARAMETERIVNV)(getProcAddr(name))
+	}
+	{
+		name := "glGetSemaphoreParameterui64vEXT"
+		if terminated {
+			name = "glGetSemaphoreParameterui64vEXT\x00"
+		}
+		gpGetSemaphoreParameterui64vEXT = (C.GPGETSEMAPHOREPARAMETERUI64VEXT)(getProcAddr(name))
+	}
+	{
+		name := "glGetShaderInfoLog"
+		if terminated {
+			name = "glGetShaderInfoLog\x00"
+		}
+		gpGetShaderInfoLog = (C.GPGETSHADERINFOLOG)(getProcAddr(name))
+		if gpGetShaderInfoLog == nil && firstMissing == "" {
+			firstMissing = "glGetShaderInfoLog"
+		}
+	}
+	{
+		name := "glGetShaderPrecisionFormat"
+		if terminated {
+			name = "glGetShaderPrecisionFormat\x00"
+		}
+		gpGetShaderPrecisionFormat = (C.GPGETSHADERPRECISIONFORMAT)(getProcAddr(name))
+		if gpGetShaderPrecisionFormat == nil && firstMissing == "" {
+			firstMissing = "glGetShaderPrecisionFormat"
+		}
+	}
+	{
+		name := "glGetShaderSource"
+		if terminated {
+			name = "glGetShaderSource\x00"
+		}
+		gpGetShaderSource = (C.GPGETSHADERSOURCE)(getProcAddr(name))
+		if gpGetShaderSource == nil && firstMissing == "" {
+			firstMissing = "glGetShaderSource"
+		}
+	}
+	{
+		name := "glGetShaderiv"
+		if terminated {
+			name = "glGetShaderiv\x00"
+		}
+		gpGetShaderiv = (C.GPGETSHADERIV)(getProcAddr(name))
+		if gpGetShaderiv == nil && firstMissing == "" {
+			firstMissing = "glGetShaderiv"
+		}
+	}
+	{
+		name := "glGetShadingRateImagePaletteNV"
+		if terminated {
+			name = "glGetShadingRateImagePaletteNV\x00"
+		}
+		gpGetShadingRateImagePaletteNV = (C.GPGETSHADINGRATEIMAGEPALETTENV)(getProcAddr(name))
+	}
+	{
+		name := "glGetShadingRateSampleLocationivNV"
+		if terminated {
+			name = "glGetShadingRateSampleLocationivNV\x00"
+		}
+		gpGetShadingRateSampleLocationivNV = (C.GPGETSHADINGRATESAMPLELOCATIONIVNV)(getProcAddr(name))
+	}
+	{
+		name := "glGetString"
+		if terminated {
+			name = "glGetString\x00"
+		}
+		gpGetString = (C.GPGETSTRING)(getProcAddr(name))
+		if gpGetString == nil && firstMissing == "" {
+			firstMissing = "glGetString"
+		}
+	}
+	{
+		name := "glGetStringi"
+		if terminated {
+			name = "glGetStringi\x00"
+		}
+		gpGetStringi = (C.GPGETSTRINGI)(getProcAddr(name))
+		if gpGetStringi == nil && firstMissing == "" {
+			firstMissing = "glGetStringi"
+		}
+	}
+	{
+		name := "glGetSynciv"
+		if terminated {
+			name = "glGetSynciv\x00"
+		}
+		gpGetSynciv = (C.GPGETSYNCIV)(getProcAddr(name))
+		if gpGetSynciv == nil && firstMissing == "" {
+			firstMissing = "glGetSynciv"
+		}
+	}
+	{
+		name := "glGetSyncivAPPLE"
+		if terminated {
+			name = "glGetSyncivAPPLE\x00"
+		}
+		gpGetSyncivAPPLE = (C.GPGETSYNCIVAPPLE)(getProcAddr(name))
+	}
+	{
+		name := "glGetTexLevelParameterfv"
+		if terminated {
+			name = "glGetTexLevelParameterfv\x00"
+		}
+		gpGetTexLevelParameterfv = (C.GPGETTEXLEVELPARAMETERFV)(getProcAddr(name))
+		if gpGetTexLevelParameterfv == nil && firstMissing == "" {
+			firstMissing = "glGetTexLevelParameterfv"
+		}
+	}
+	{
+		name := "glGetTexLevelParameteriv"
+		if terminated {
+			name = "glGetTexLevelParameteriv\x00"
+		}
+		gpGetTexLevelParameteriv = (C.GPGETTEXLEVELPARAMETERIV)(getProcAddr(name))
+		if gpGetTexLevelParameteriv == nil && firstMissing == "" {
+			firstMissing = "glGetTexLevelParameteriv"
+		}
+	}
+	{
+		name := "glGetTexParameterIiv"
+		if terminated {
+			name = "glGetTexParameterIiv\x00"
+		}
+		gpGetTexParameterIiv = (C.GPGETTEXPARAMETERIIV)(getProcAddr(name))
+		if gpGetTexParameterIiv == nil && firstMissing == "" {
+			firstMissing = "glGetTexParameterIiv"
+		}
+	}
+	{
+		name := "glGetTexParameterIivEXT"
+		if terminated {
+			name = "glGetTexParameterIivEXT\x00"
+		}
+		gpGetTexParameterIivEXT = (C.GPGETTEXPARAMETERIIVEXT)(getProcAddr(name))
+	}
+	{
+		name := "glGetTexParameterIivOES"
+		if terminated {
+			name = "glGetTexParameterIivOES\x00"
+		}
+		gpGetTexParameterIivOES = (C.GPGETTEXPARAMETERIIVOES)(getProcAddr(name))
+	}
+	{
+		name := "glGetTexParameterIuiv"
+		if terminated {
+			name = "glGetTexParameterIuiv\x00"
+		}
+		gpGetTexParameterIuiv = (C.GPGETTEXPARAMETERIUIV)(getProcAddr(name))
+		if gpGetTexParameterIuiv == nil && firstMissing == "" {
+			firstMissing = "glGetTexParameterIuiv"
+		}
+	}
+	{
+		name := "glGetTexParameterIuivEXT"
+		if terminated {
+			name = "glGetTexParameterIuivEXT\x00"
+		}
+		gpGetTexParameterIuivEXT = (C.GPGETTEXPARAMETERIUIVEXT)(getProcAddr(name))
+	}
+	{
+		name := "glGetTexParameterIuivOES"
+		if terminated {
+			name = "glGetTexParameterIuivOES\x00"
+		}
+		gpGetTexParameterIuivOES = (C.GPGETTEXPARAMETERIUIVOES)(getProcAddr(name))
+	}
+	{
+		name := "glGetTexParameterfv"
+		if terminated {
+			name = "glGetTexParameterfv\x00"
+		}
+		gpGetTexParameterfv = (C.GPGETTEXPARAMETERFV)(getProcAddr(name))
+		if gpGetTexParameterfv == nil && firstMissing == "" {
+			firstMissing = "glGetTexParameterfv"
+		}
+	}
+	{
+		name := "glGetTexParameteriv"
+		if terminated {
+			name = "glGetTexParameteriv\x00"
+		}
+		gpGetTexParameteriv = (C.GPGETTEXPARAMETERIV)(getProcAddr(name))
+		if gpGetTexParameteriv == nil && firstMissing == "" {
+			firstMissing = "glGetTexParameteriv"
+		}
+	}
+	{
+		name := "glGetTextureHandleIMG"
+		if terminated {
+			name = "glGetTextureHandleIMG\x00"
+		}
+		gpGetTextureHandleIMG = (C.GPGETTEXTUREHANDLEIMG)(getProcAddr(name))
+	}
+	{
+		name := "glGetTextureHandleNV"
+		if terminated {
+			name = "glGetTextureHandleNV\x00"
+		}
+		gpGetTextureHandleNV = (C.GPGETTEXTUREHANDLENV)(getProcAddr(name))
+	}
+	{
+		name := "glGetTextureSamplerHandleIMG"
+		if terminated {
+			name = "glGetTextureSamplerHandleIMG\x00"
+		}
+		gpGetTextureSamplerHandleIMG = (C.GPGETTEXTURESAMPLERHANDLEIMG)(getProcAddr(name))
+	}
+	{
+		name := "glGetTextureSamplerHandleNV"
+		if terminated {
+			name = "glGetTextureSamplerHandleNV\x00"
+		}
+		gpGetTextureSamplerHandleNV = (C.GPGETTEXTURESAMPLERHANDLENV)(getProcAddr(name))
+	}
+	{
+		name := "glGetTransformFeedbackVarying"
+		if terminated {
+			name = "glGetTransformFeedbackVarying\x00"
+		}
+		gpGetTransformFeedbackVarying = (C.GPGETTRANSFORMFEEDBACKVARYING)(getProcAddr(name))
+		if gpGetTransformFeedbackVarying == nil && firstMissing == "" {
+			firstMissing = "glGetTransformFeedbackVarying"
+		}
+	}
+	{
+		name := "glGetTranslatedShaderSourceANGLE"
+		if terminated {
+			name = "glGetTranslatedShaderSourceANGLE\x00"
+		}
+		gpGetTranslatedShaderSourceANGLE = (C.GPGETTRANSLATEDSHADERSOURCEANGLE)(getProcAddr(name))
+	}
+	{
+		name := "glGetUniformBlockIndex"
+		if terminated {
+			name = "glGetUniformBlockIndex\x00"
+		}
+		gpGetUniformBlockIndex = (C.GPGETUNIFORMBLOCKINDEX)(getProcAddr(name))
+		if gpGetUniformBlockIndex == nil && firstMissing == "" {
+			firstMissing = "glGetUniformBlockIndex"
+		}
+	}
+	{
+		name := "glGetUniformIndices"
+		if terminated {
+			name = "glGetUniformIndices\x00"
+		}
+		gpGetUniformIndices = (C.GPGETUNIFORMINDICES)(getProcAddr(name))
+		if gpGetUniformIndices == nil && firstMissing == "" {
+			firstMissing = "glGetUniformIndices"
+		}
+	}
+	{
+		name := "glGetUniformLocation"
+		if terminated {
+			name = "glGetUniformLocation\x00"
+		}
+		gpGetUniformLocation = (C.GPGETUNIFORMLOCATION)(getProcAddr(name))
+		if gpGetUniformLocation == nil && firstMissing == "" {
+			firstMissing = "glGetUniformLocation"
+		}
+	}
+	{
+		name := "glGetUniformfv"
+		if terminated {
+			name = "glGetUniformfv\x00"
+		}
+		gpGetUniformfv = (C.GPGETUNIFORMFV)(getProcAddr(name))
+		if gpGetUniformfv == nil && firstMissing == "" {
+			firstMissing = "glGetUniformfv"
+		}
+	}
+	{
+		name := "glGetUniformi64vNV"
+		if terminated {
+			name = "glGetUniformi64vNV\x00"
+		}
+		gpGetUniformi64vNV = (C.GPGETUNIFORMI64VNV)(getProcAddr(name))
+	}
+	{
+		name := "glGetUniformiv"
+		if terminated {
+			name = "glGetUniformiv\x00"
+		}
+		gpGetUniformiv = (C.GPGETUNIFORMIV)(getProcAddr(name))
+		if gpGetUniformiv == nil && firstMissing == "" {
+			firstMissing = "glGetUniformiv"
+		}
+	}
+	{
+		name := "glGetUniformuiv"
+		if terminated {
+			name = "glGetUniformuiv\x00"
+		}
+		gpGetUniformuiv = (C.GPGETUNIFORMUIV)(getProcAddr(name))
+		if gpGetUniformuiv == nil && firstMissing == "" {
+			firstMissing = "glGetUniformuiv"
+		}
+	}
+	{
+		name := "glGetUnsignedBytei_vEXT"
+		if terminated {
+			name = "glGetUnsignedBytei_vEXT\x00"
+		}
+		gpGetUnsignedBytei_vEXT = (C.GPGETUNSIGNEDBYTEI_VEXT)(getProcAddr(name))
+	}
+	{
+		name := "glGetUnsignedBytevEXT"
+		if terminated {
+			name = "glGetUnsignedBytevEXT\x00"
+		}
+		gpGetUnsignedBytevEXT = (C.GPGETUNSIGNEDBYTEVEXT)(getProcAddr(name))
+	}
+	{
+		name := "glGetVertexAttribIiv"
+		if terminated {
+			name = "glGetVertexAttribIiv\x00"
+		}
+		gpGetVertexAttribIiv = (C.GPGETVERTEXATTRIBIIV)(getProcAddr(name))
+		if gpGetVertexAttribIiv == nil && firstMissing == "" {
+			firstMissing = "glGetVertexAttribIiv"
+		}
+	}
+	{
+		name := "glGetVertexAttribIuiv"
+		if terminated {
+			name = "glGetVertexAttribIuiv\x00"
+		}
+		gpGetVertexAttribIuiv = (C.GPGETVERTEXATTRIBIUIV)(getProcAddr(name))
+		if gpGetVertexAttribIuiv == nil && firstMissing == "" {
+			firstMissing = "glGetVertexAttribIuiv"
+		}
+	}
+	{
+		name := "glGetVertexAttribPointerv"
+		if terminated {
+			name = "glGetVertexAttribPointerv\x00"
+		}
+		gpGetVertexAttribPointerv = (C.GPGETVERTEXATTRIBPOINTERV)(getProcAddr(name))
+		if gpGetVertexAttribPointerv == nil && firstMissing == "" {
+			firstMissing = "glGetVertexAttribPointerv"
+		}
+	}
+	{
+		name := "glGetVertexAttribfv"
+		if terminated {
+			name = "glGetVertexAttribfv\x00"
+		}
+		gpGetVertexAttribfv = (C.GPGETVERTEXATTRIBFV)(getProcAddr(name))
+		if gpGetVertexAttribfv == nil && firstMissing == "" {
+			firstMissing = "glGetVertexAttribfv"
+		}
+	}
+	{
+		name := "glGetVertexAttribiv"
+		if terminated {
+			name = "glGetVertexAttribiv\x00"
+		}
+		gpGetVertexAttribiv = (C.GPGETVERTEXATTRIBIV)(getProcAddr(name))
+		if gpGetVertexAttribiv == nil && firstMissing == "" {
+			firstMissing = "glGetVertexAttribiv"
+		}
+	}
+	{
+		name := "glGetVkProcAddrNV"
+		if terminated {
+			name = "glGetVkProcAddrNV\x00"
+		}
+		gpGetVkProcAddrNV = (C.GPGETVKPROCADDRNV)(getProcAddr(name))
+	}
+	{
+		name := "glGetnUniformfv"
+		if terminated {
+			name = "glGetnUniformfv\x00"
+		}
+		gpGetnUniformfv = (C.GPGETNUNIFORMFV)(getProcAddr(name))
+		if gpGetnUniformfv == nil && firstMissing == "" {
+			firstMissing = "glGetnUniformfv"
+		}
+	}
+	{
+		name := "glGetnUniformfvEXT"
+		if terminated {
+			name = "glGetnUniformfvEXT\x00"
+		}
+		gpGetnUniformfvEXT = (C.GPGETNUNIFORMFVEXT)(getProcAddr(name))
+	}
+	{
+		name := "glGetnUniformfvKHR"
+		if terminated {
+			name = "glGetnUniformfvKHR\x00"
+		}
+		gpGetnUniformfvKHR = (C.GPGETNUNIFORMFVKHR)(getProcAddr(name))
+	}
+	{
+		name := "glGetnUniformiv"
+		if terminated {
+			name = "glGetnUniformiv\x00"
+		}
+		gpGetnUniformiv = (C.GPGETNUNIFORMIV)(getProcAddr(name))
+		if gpGetnUniformiv == nil && firstMissing == "" {
+			firstMissing = "glGetnUniformiv"
+		}
+	}
+	{
+		name := "glGetnUniformivEXT"
+		if terminated {
+			name = "glGetnUniformivEXT\x00"
+		}
+		gpGetnUniformivEXT = (C.GPGETNUNIFORMIVEXT)(getProcAddr(name))
+	}
+	{
+		name := "glGetnUniformivKHR"
+		if terminated {
+			name = "glGetnUniformivKHR\x00"
+		}
+		gpGetnUniformivKHR = (C.GPGETNUNIFORMIVKHR)(getProcAddr(name))
+	}
+	{
+		name := "glGetnUniformuiv"
+		if terminated {
+			name = "glGetnUniformuiv\x00"
+		}
+		gpGetnUniformuiv = (C.GPGETNUNIFORMUIV)(getProcAddr(name))
+		if gpGetnUniformuiv == nil && firstMissing == "" {
+			firstMissing = "glGetnUniformuiv"
+		}
+	}
+	{
+		name := "glGetnUniformuivKHR"
+		if terminated {
+			name = "glGetnUniformuivKHR\x00"
+		}
+		gpGetnUniformuivKHR = (C.GPGETNUNIFORMUIVKHR)(getProcAddr(name))
+	}
+	{
+		name := "glHint"
+		if terminated {
+			name = "glHint\x00"
+		}
+		gpHint = (C.GPHINT)(getProcAddr(name))
+		if gpHint == nil && firstMissing == "" {
+			firstMissing = "glHint"
+		}
+	}
+	{
+		name := "glImportMemoryFdEXT"
+		if terminated {
+			name = "glImportMemoryFdEXT\x00"
+		}
+		gpImportMemoryFdEXT = (C.GPIMPORTMEMORYFDEXT)(getProcAddr(name))
+	}
+	{
+		name := "glImportMemoryWin32HandleEXT"
+		if terminated {
+			name = "glImportMemoryWin32HandleEXT\x00"
+		}
+		gpImportMemoryWin32HandleEXT = (C.GPIMPORTMEMORYWIN32HANDLEEXT)(getProcAddr(name))
+	}
+	{
+		name := "glImportMemoryWin32NameEXT"
+		if terminated {
+			name = "glImportMemoryWin32NameEXT\x00"
+		}
+		gpImportMemoryWin32NameEXT = (C.GPIMPORTMEMORYWIN32NAMEEXT)(getProcAddr(name))
+	}
+	{
+		name := "glImportSemaphoreFdEXT"
+		if terminated {
+			name = "glImportSemaphoreFdEXT\x00"
+		}
+		gpImportSemaphoreFdEXT = (C.GPIMPORTSEMAPHOREFDEXT)(getProcAddr(name))
+	}
+	{
+		name := "glImportSemaphoreWin32HandleEXT"
+		if terminated {
+			name = "glImportSemaphoreWin32HandleEXT\x00"
+		}
+		gpImportSemaphoreWin32HandleEXT = (C.GPIMPORTSEMAPHOREWIN32HANDLEEXT)(getProcAddr(name))
+	}
+	{
+		name := "glImportSemaphoreWin32NameEXT"
+		if terminated {
+			name = "glImportSemaphoreWin32NameEXT\x00"
+		}
+		gpImportSemaphoreWin32NameEXT = (C.GPIMPORTSEMAPHOREWIN32NAMEEXT)(getProcAddr(name))
+	}
+	{
+		name := "glInsertEventMarkerEXT"
+		if terminated {
+			name = "glInsertEventMarkerEXT\x00"
+		}
+		gpInsertEventMarkerEXT = (C.GPINSERTEVENTMARKEREXT)(getProcAddr(name))
+	}
+	{
+		name := "glInterpolatePathsNV"
+		if terminated {
+			name = "glInterpolatePathsNV\x00"
+		}
+		gpInterpolatePathsNV = (C.GPINTERPOLATEPATHSNV)(getProcAddr(name))
+	}
+	{
+		name := "glInvalidateFramebuffer"
+		if terminated {
+			name = "glInvalidateFramebuffer\x00"
+		}
+		gpInvalidateFramebuffer = (C.GPINVALIDATEFRAMEBUFFER)(getProcAddr(name))
+		if gpInvalidateFramebuffer == nil && firstMissing == "" {
+			firstMissing = "glInvalidateFramebuffer"
+		}
+	}
+	{
+		name := "glInvalidateSubFramebuffer"
+		if terminated {
+			name = "glInvalidateSubFramebuffer\x00"
+		}
+		gpInvalidateSubFramebuffer = (C.GPINVALIDATESUBFRAMEBUFFER)(getProcAddr(name))
+		if gpInvalidateSubFramebuffer == nil && firstMissing == "" {
+			firstMissing = "glInvalidateSubFramebuffer"
+		}
+	}
+	{
+		name := "glIsBuffer"
+		if terminated {
+			name = "glIsBuffer\x00"
+		}
+		gpIsBuffer = (C.GPISBUFFER)(getProcAddr(name))
+		if gpIsBuffer == nil && firstMissing == "" {
+			firstMissing = "glIsBuffer"
+		}
+	}
+	{
+		name := "glIsEnabled"
+		if terminated {
+			name = "glIsEnabled\x00"
+		}
+		gpIsEnabled = (C.GPISENABLED)(getProcAddr(name))
+		if gpIsEnabled == nil && firstMissing == "" {
+			firstMissing = "glIsEnabled"
+		}
+	}
+	{
+		name := "glIsEnabledi"
+		if terminated {
+			name = "glIsEnabledi\x00"
+		}
+		gpIsEnabledi = (C.GPISENABLEDI)(getProcAddr(name))
+		if gpIsEnabledi == nil && firstMissing == "" {
+			firstMissing = "glIsEnabledi"
+		}
+	}
+	{
+		name := "glIsEnablediEXT"
+		if terminated {
+			name = "glIsEnablediEXT\x00"
+		}
+		gpIsEnablediEXT = (C.GPISENABLEDIEXT)(getProcAddr(name))
+	}
+	{
+		name := "glIsEnablediNV"
+		if terminated {
+			name = "glIsEnablediNV\x00"
+		}
+		gpIsEnablediNV = (C.GPISENABLEDINV)(getProcAddr(name))
+	}
+	{
+		name := "glIsEnablediOES"
+		if terminated {
+			name = "glIsEnablediOES\x00"
+		}
+		gpIsEnablediOES = (C.GPISENABLEDIOES)(getProcAddr(name))
+	}
+	{
+		name := "glIsFenceNV"
+		if terminated {
+			name = "glIsFenceNV\x00"
+		}
+		gpIsFenceNV = (C.GPISFENCENV)(getProcAddr(name))
+	}
+	{
+		name := "glIsFramebuffer"
+		if terminated {
+			name = "glIsFramebuffer\x00"
+		}
+		gpIsFramebuffer = (C.GPISFRAMEBUFFER)(getProcAddr(name))
+		if gpIsFramebuffer == nil && firstMissing == "" {
+			firstMissing = "glIsFramebuffer"
+		}
+	}
+	{
+		name := "glIsImageHandleResidentNV"
+		if terminated {
+			name = "glIsImageHandleResidentNV\x00"
+		}
+		gpIsImageHandleResidentNV = (C.GPISIMAGEHANDLERESIDENTNV)(getProcAddr(name))
+	}
+	{
+		name := "glIsMemoryObjectEXT"
+		if terminated {
+			name = "glIsMemoryObjectEXT\x00"
+		}
+		gpIsMemoryObjectEXT = (C.GPISMEMORYOBJECTEXT)(getProcAddr(name))
+	}
+	{
+		name := "glIsPathNV"
+		if terminated {
+			name = "glIsPathNV\x00"
+		}
+		gpIsPathNV = (C.GPISPATHNV)(getProcAddr(name))
+	}
+	{
+		name := "glIsPointInFillPathNV"
+		if terminated {
+			name = "glIsPointInFillPathNV\x00"
+		}
+		gpIsPointInFillPathNV = (C.GPISPOINTINFILLPATHNV)(getProcAddr(name))
+	}
+	{
+		name := "glIsPointInStrokePathNV"
+		if terminated {
+			name = "glIsPointInStrokePathNV\x00"
+		}
+		gpIsPointInStrokePathNV = (C.GPISPOINTINSTROKEPATHNV)(getProcAddr(name))
+	}
+	{
+		name := "glIsProgram"
+		if terminated {
+			name = "glIsProgram\x00"
+		}
+		gpIsProgram = (C.GPISPROGRAM)(getProcAddr(name))
+		if gpIsProgram == nil && firstMissing == "" {
+			firstMissing = "glIsProgram"
+		}
+	}
+	{
+		name := "glIsProgramPipeline"
+		if terminated {
+			name = "glIsProgramPipeline\x00"
+		}
+		gpIsProgramPipeline = (C.GPISPROGRAMPIPELINE)(getProcAddr(name))
+		if gpIsProgramPipeline == nil && firstMissing == "" {
+			firstMissing = "glIsProgramPipeline"
+		}
+	}
+	{
+		name := "glIsProgramPipelineEXT"
+		if terminated {
+			name = "glIsProgramPipelineEXT\x00"
+		}
+		gpIsProgramPipelineEXT = (C.GPISPROGRAMPIPELINEEXT)(getProcAddr(name))
+	}
+	{
+		name := "glIsQuery"
+		if terminated {
+			name = "glIsQuery\x00"
+		}
+		gpIsQuery = (C.GPISQUERY)(getProcAddr(name))
+		if gpIsQuery == nil && firstMissing == "" {
+			firstMissing = "glIsQuery"
+		}
+	}
+	{
+		name := "glIsQueryEXT"
+		if terminated {
+			name = "glIsQueryEXT\x00"
+		}
+		gpIsQueryEXT = (C.GPISQUERYEXT)(getProcAddr(name))
+	}
+	{
+		name := "glIsRenderbuffer"
+		if terminated {
+			name = "glIsRenderbuffer\x00"
+		}
+		gpIsRenderbuffer = (C.GPISRENDERBUFFER)(getProcAddr(name))
+		if gpIsRenderbuffer == nil && firstMissing == "" {
+			firstMissing = "glIsRenderbuffer"
+		}
+	}
+	{
+		name := "glIsSampler"
+		if terminated {
+			name = "glIsSampler\x00"
+		}
+		gpIsSampler = (C.GPISSAMPLER)(getProcAddr(name))
+		if gpIsSampler == nil && firstMissing == "" {
+			firstMissing = "glIsSampler"
+		}
+	}
+	{
+		name := "glIsSemaphoreEXT"
+		if terminated {
+			name = "glIsSemaphoreEXT\x00"
+		}
+		gpIsSemaphoreEXT = (C.GPISSEMAPHOREEXT)(getProcAddr(name))
+	}
+	{
+		name := "glIsShader"
+		if terminated {
+			name = "glIsShader\x00"
+		}
+		gpIsShader = (C.GPISSHADER)(getProcAddr(name))
+		if gpIsShader == nil && firstMissing == "" {
+			firstMissing = "glIsShader"
+		}
+	}
+	{
+		name := "glIsSync"
+		if terminated {
+			name = "glIsSync\x00"
+		}
+		gpIsSync = (C.GPISSYNC)(getProcAddr(name))
+		if gpIsSync == nil && firstMissing == "" {
+			firstMissing = "glIsSync"
+		}
+	}
+	{
+		name := "glIsSyncAPPLE"
+		if terminated {
+			name = "glIsSyncAPPLE\x00"
+		}
+		gpIsSyncAPPLE = (C.GPISSYNCAPPLE)(getProcAddr(name))
+	}
+	{
+		name := "glIsTexture"
+		if terminated {
+			name = "glIsTexture\x00"
+		}
+		gpIsTexture = (C.GPISTEXTURE)(getProcAddr(name))
+		if gpIsTexture == nil && firstMissing == "" {
+			firstMissing = "glIsTexture"
+		}
+	}
+	{
+		name := "glIsTextureHandleResidentNV"
+		if terminated {
+			name = "glIsTextureHandleResidentNV\x00"
+		}
+		gpIsTextureHandleResidentNV = (C.GPISTEXTUREHANDLERESIDENTNV)(getProcAddr(name))
+	}
+	{
+		name := "glIsTransformFeedback"
+		if terminated {
+			name = "glIsTransformFeedback\x00"
+		}
+		gpIsTransformFeedback = (C.GPISTRANSFORMFEEDBACK)(getProcAddr(name))
+		if gpIsTransformFeedback == nil && firstMissing == "" {
+			firstMissing = "glIsTransformFeedback"
+		}
+	}
+	{
+		name := "glIsVertexArray"
+		if terminated {
+			name = "glIsVertexArray\x00"
+		}
+		gpIsVertexArray = (C.GPISVERTEXARRAY)(getProcAddr(name))
+		if gpIsVertexArray == nil && firstMissing == "" {
+			firstMissing = "glIsVertexArray"
+		}
+	}
+	{
+		name := "glIsVertexArrayOES"
+		if terminated {
+			name = "glIsVertexArrayOES\x00"
+		}
+		gpIsVertexArrayOES = (C.GPISVERTEXARRAYOES)(getProcAddr(name))
+	}
+	{
+		name := "glLabelObjectEXT"
+		if terminated {
+			name = "glLabelObjectEXT\x00"
+		}
+		gpLabelObjectEXT = (C.GPLABELOBJECTEXT)(getProcAddr(name))
+	}
+	{
+		name := "glLineWidth"
+		if terminated {
+			name = "glLineWidth\x00"
+		}
+		gpLineWidth = (C.GPLINEWIDTH)(getProcAddr(name))
+		if gpLineWidth == nil && firstMissing == "" {
+			firstMissing = "glLineWidth"
+		}
+	}
+	{
+		name := "glLinkProgram"
+		if terminated {
+			name = "glLinkProgram\x00"
+		}
+		gpLinkProgram = (C.GPLINKPROGRAM)(getProcAddr(name))
+		if gpLinkProgram == nil && firstMissing == "" {
+			firstMissing = "glLinkProgram"
+		}
+	}
+	{
+		name := "glMakeImageHandleNonResidentNV"
+		if terminated {
+			name = "glMakeImageHandleNonResidentNV\x00"
+		}
+		gpMakeImageHandleNonResidentNV = (C.GPMAKEIMAGEHANDLENONRESIDENTNV)(getProcAddr(name))
+	}
+	{
+		name := "glMakeImageHandleResidentNV"
+		if terminated {
+			name = "glMakeImageHandleResidentNV\x00"
+		}
+		gpMakeImageHandleResidentNV = (C.GPMAKEIMAGEHANDLERESIDENTNV)(getProcAddr(name))
+	}
+	{
+		name := "glMakeTextureHandleNonResidentNV"
+		if terminated {
+			name = "glMakeTextureHandleNonResidentNV\x00"
+		}
+		gpMakeTextureHandleNonResidentNV = (C.GPMAKETEXTUREHANDLENONRESIDENTNV)(getProcAddr(name))
+	}
+	{
+		name := "glMakeTextureHandleResidentNV"
+		if terminated {
+			name = "glMakeTextureHandleResidentNV\x00"
+		}
+		gpMakeTextureHandleResidentNV = (C.GPMAKETEXTUREHANDLERESIDENTNV)(getProcAddr(name))
+	}
+	{
+		name := "glMapBufferOES"
+		if terminated {
+			name = "glMapBufferOES\x00"
+		}
+		gpMapBufferOES = (C.GPMAPBUFFEROES)(getProcAddr(name))
+	}
+	{
+		name := "glMapBufferRange"
+		if terminated {
+			name = "glMapBufferRange\x00"
+		}
+		gpMapBufferRange = (C.GPMAPBUFFERRANGE)(getProcAddr(name))
+		if gpMapBufferRange == nil && firstMissing == "" {
+			firstMissing = "glMapBufferRange"
+		}
+	}
+	{
+		name := "glMapBufferRangeEXT"
+		if terminated {
+			name = "glMapBufferRangeEXT\x00"
+		}
+		gpMapBufferRangeEXT = (C.GPMAPBUFFERRANGEEXT)(getProcAddr(name))
+	}
+	{
+		name := "glMatrixFrustumEXT"
+		if terminated {
+			name = "glMatrixFrustumEXT\x00"
+		}
+		gpMatrixFrustumEXT = (C.GPMATRIXFRUSTUMEXT)(getProcAddr(name))
+	}
+	{
+		name := "glMatrixLoad3x2fNV"
+		if terminated {
+			name = "glMatrixLoad3x2fNV\x00"
+		}
+		gpMatrixLoad3x2fNV = (C.GPMATRIXLOAD3X2FNV)(getProcAddr(name))
+	}
+	{
+		name := "glMatrixLoad3x3fNV"
+		if terminated {
+			name = "glMatrixLoad3x3fNV\x00"
+		}
+		gpMatrixLoad3x3fNV = (C.GPMATRIXLOAD3X3FNV)(getProcAddr(name))
+	}
+	{
+		name := "glMatrixLoadIdentityEXT"
+		if terminated {
+			name = "glMatrixLoadIdentityEXT\x00"
+		}
+		gpMatrixLoadIdentityEXT = (C.GPMATRIXLOADIDENTITYEXT)(getProcAddr(name))
+	}
+	{
+		name := "glMatrixLoadTranspose3x3fNV"
+		if terminated {
+			name = "glMatrixLoadTranspose3x3fNV\x00"
+		}
+		gpMatrixLoadTranspose3x3fNV = (C.GPMATRIXLOADTRANSPOSE3X3FNV)(getProcAddr(name))
+	}
+	{
+		name := "glMatrixLoadTransposedEXT"
+		if terminated {
+			name = "glMatrixLoadTransposedEXT\x00"
+		}
+		gpMatrixLoadTransposedEXT = (C.GPMATRIXLOADTRANSPOSEDEXT)(getProcAddr(name))
+	}
+	{
+		name := "glMatrixLoadTransposefEXT"
+		if terminated {
+			name = "glMatrixLoadTransposefEXT\x00"
+		}
+		gpMatrixLoadTransposefEXT = (C.GPMATRIXLOADTRANSPOSEFEXT)(getProcAddr(name))
+	}
+	{
+		name := "glMatrixLoaddEXT"
+		if terminated {
+			name = "glMatrixLoaddEXT\x00"
+		}
+		gpMatrixLoaddEXT = (C.GPMATRIXLOADDEXT)(getProcAddr(name))
+	}
+	{
+		name := "glMatrixLoadfEXT"
+		if terminated {
+			name = "glMatrixLoadfEXT\x00"
+		}
+		gpMatrixLoadfEXT = (C.GPMATRIXLOADFEXT)(getProcAddr(name))
+	}
+	{
+		name := "glMatrixMult3x2fNV"
+		if terminated {
+			name = "glMatrixMult3x2fNV\x00"
+		}
+		gpMatrixMult3x2fNV = (C.GPMATRIXMULT3X2FNV)(getProcAddr(name))
+	}
+	{
+		name := "glMatrixMult3x3fNV"
+		if terminated {
+			name = "glMatrixMult3x3fNV\x00"
+		}
+		gpMatrixMult3x3fNV = (C.GPMATRIXMULT3X3FNV)(getProcAddr(name))
+	}
+	{
+		name := "glMatrixMultTranspose3x3fNV"
+		if terminated {
+			name = "glMatrixMultTranspose3x3fNV\x00"
+		}
+		gpMatrixMultTranspose3x3fNV = (C.GPMATRIXMULTTRANSPOSE3X3FNV)(getProcAddr(name))
+	}
+	{
+		name := "glMatrixMultTransposedEXT"
+		if terminated {
+			name = "glMatrixMultTransposedEXT\x00"
+		}
+		gpMatrixMultTransposedEXT = (C.GPMATRIXMULTTRANSPOSEDEXT)(getProcAddr(name))
+	}
+	{
+		name := "glMatrixMultTransposefEXT"
+		if terminated {
+			name = "glMatrixMultTransposefEXT\x00"
+		}
+		gpMatrixMultTransposefEXT = (C.GPMATRIXMULTTRANSPOSEFEXT)(getProcAddr(name))
+	}
+	{
+		name := "glMatrixMultdEXT"
+		if terminated {
+			name = "glMatrixMultdEXT\x00"
+		}
+		gpMatrixMultdEXT = (C.GPMATRIXMULTDEXT)(getProcAddr(name))
+	}
+	{
+		name := "glMatrixMultfEXT"
+		if terminated {
+			name = "glMatrixMultfEXT\x00"
+		}
+		gpMatrixMultfEXT = (C.GPMATRIXMULTFEXT)(getProcAddr(name))
+	}
+	{
+		name := "glMatrixOrthoEXT"
+		if terminated {
+			name = "glMatrixOrthoEXT\x00"
+		}
+		gpMatrixOrthoEXT = (C.GPMATRIXORTHOEXT)(getProcAddr(name))
+	}
+	{
+		name := "glMatrixPopEXT"
+		if terminated {
+			name = "glMatrixPopEXT\x00"
+		}
+		gpMatrixPopEXT = (C.GPMATRIXPOPEXT)(getProcAddr(name))
+	}
+	{
+		name := "glMatrixPushEXT"
+		if terminated {
+			name = "glMatrixPushEXT\x00"
+		}
+		gpMatrixPushEXT = (C.GPMATRIXPUSHEXT)(getProcAddr(name))
+	}
+	{
+		name := "glMatrixRotatedEXT"
+		if terminated {
+			name = "glMatrixRotatedEXT\x00"
+		}
+		gpMatrixRotatedEXT = (C.GPMATRIXROTATEDEXT)(getProcAddr(name))
+	}
+	{
+		name := "glMatrixRotatefEXT"
+		if terminated {
+			name = "glMatrixRotatefEXT\x00"
+		}
+		gpMatrixRotatefEXT = (C.GPMATRIXROTATEFEXT)(getProcAddr(name))
+	}
+	{
+		name := "glMatrixScaledEXT"
+		if terminated {
+			name = "glMatrixScaledEXT\x00"
+		}
+		gpMatrixScaledEXT = (C.GPMATRIXSCALEDEXT)(getProcAddr(name))
+	}
+	{
+		name := "glMatrixScalefEXT"
+		if terminated {
+			name = "glMatrixScalefEXT\x00"
+		}
+		gpMatrixScalefEXT = (C.GPMATRIXSCALEFEXT)(getProcAddr(name))
+	}
+	{
+		name := "glMatrixTranslatedEXT"
+		if terminated {
+			name = "glMatrixTranslatedEXT\x00"
+		}
+		gpMatrixTranslatedEXT = (C.GPMATRIXTRANSLATEDEXT)(getProcAddr(name))
+	}
+	{
+		name := "glMatrixTranslatefEXT"
+		if terminated {
+			name = "glMatrixTranslatefEXT\x00"
+		}
+		gpMatrixTranslatefEXT = (C.GPMATRIXTRANSLATEFEXT)(getProcAddr(name))
+	}
+	{
+		name := "glMaxActiveShaderCoresARM"
+		if terminated {
+			name = "glMaxActiveShaderCoresARM\x00"
+		}
+		gpMaxActiveShaderCoresARM = (C.GPMAXACTIVESHADERCORESARM)(getProcAddr(name))
+	}
+	{
+		name := "glMaxShaderCompilerThreadsKHR"
+		if terminated {
+			name = "glMaxShaderCompilerThreadsKHR\x00"
+		}
+		gpMaxShaderCompilerThreadsKHR = (C.GPMAXSHADERCOMPILERTHREADSKHR)(getProcAddr(name))
+	}
+	{
+		name := "glMemoryBarrier"
+		if terminated {
+			name = "glMemoryBarrier\x00"
+		}
+		gpMemoryBarrier = (C.GPMEMORYBARRIER)(getProcAddr(name))
+		if gpMemoryBarrier == nil && firstMissing == "" {
+			firstMissing = "glMemoryBarrier"
+		}
+	}
+	{
+		name := "glMemoryBarrierByRegion"
+		if terminated {
+			name = "glMemoryBarrierByRegion\x00"
+		}
+		gpMemoryBarrierByRegion = (C.GPMEMORYBARRIERBYREGION)(getProcAddr(name))
+		if gpMemoryBarrierByRegion == nil && firstMissing == "" {
+			firstMissing = "glMemoryBarrierByRegion"
+		}
+	}
+	{
+		name := "glMemoryObjectParameterivEXT"
+		if terminated {
+			name = "glMemoryObjectParameterivEXT\x00"
+		}
+		gpMemoryObjectParameterivEXT = (C.GPMEMORYOBJECTPARAMETERIVEXT)(getProcAddr(name))
+	}
+	{
+		name := "glMinSampleShading"
+		if terminated {
+			name = "glMinSampleShading\x00"
+		}
+		gpMinSampleShading = (C.GPMINSAMPLESHADING)(getProcAddr(name))
+		if gpMinSampleShading == nil && firstMissing == "" {
+			firstMissing = "glMinSampleShading"
+		}
+	}
+	{
+		name := "glMinSampleShadingOES"
+		if terminated {
+			name = "glMinSampleShadingOES\x00"
+		}
+		gpMinSampleShadingOES = (C.GPMINSAMPLESHADINGOES)(getProcAddr(name))
+	}
+	{
+		name := "glMultiDrawArraysEXT"
+		if terminated {
+			name = "glMultiDrawArraysEXT\x00"
+		}
+		gpMultiDrawArraysEXT = (C.GPMULTIDRAWARRAYSEXT)(getProcAddr(name))
+	}
+	{
+		name := "glMultiDrawArraysIndirectEXT"
+		if terminated {
+			name = "glMultiDrawArraysIndirectEXT\x00"
+		}
+		gpMultiDrawArraysIndirectEXT = (C.GPMULTIDRAWARRAYSINDIRECTEXT)(getProcAddr(name))
+	}
+	{
+		name := "glMultiDrawElementsBaseVertexEXT"
+		if terminated {
+			name = "glMultiDrawElementsBaseVertexEXT\x00"
+		}
+		gpMultiDrawElementsBaseVertexEXT = (C.GPMULTIDRAWELEMENTSBASEVERTEXEXT)(getProcAddr(name))
+	}
+	{
+		name := "glMultiDrawElementsEXT"
+		if terminated {
+			name = "glMultiDrawElementsEXT\x00"
+		}
+		gpMultiDrawElementsEXT = (C.GPMULTIDRAWELEMENTSEXT)(getProcAddr(name))
+	}
+	{
+		name := "glMultiDrawElementsIndirectEXT"
+		if terminated {
+			name = "glMultiDrawElementsIndirectEXT\x00"
+		}
+		gpMultiDrawElementsIndirectEXT = (C.GPMULTIDRAWELEMENTSINDIRECTEXT)(getProcAddr(name))
+	}
+	{
+		name := "glMultiDrawMeshTasksIndirectCountEXT"
+		if terminated {
+			name = "glMultiDrawMeshTasksIndirectCountEXT\x00"
+		}
+		gpMultiDrawMeshTasksIndirectCountEXT = (C.GPMULTIDRAWMESHTASKSINDIRECTCOUNTEXT)(getProcAddr(name))
+	}
+	{
+		name := "glMultiDrawMeshTasksIndirectCountNV"
+		if terminated {
+			name = "glMultiDrawMeshTasksIndirectCountNV\x00"
+		}
+		gpMultiDrawMeshTasksIndirectCountNV = (C.GPMULTIDRAWMESHTASKSINDIRECTCOUNTNV)(getProcAddr(name))
+	}
+	{
+		name := "glMultiDrawMeshTasksIndirectEXT"
+		if terminated {
+			name = "glMultiDrawMeshTasksIndirectEXT\x00"
+		}
+		gpMultiDrawMeshTasksIndirectEXT = (C.GPMULTIDRAWMESHTASKSINDIRECTEXT)(getProcAddr(name))
+	}
+	{
+		name := "glMultiDrawMeshTasksIndirectNV"
+		if terminated {
+			name = "glMultiDrawMeshTasksIndirectNV\x00"
+		}
+		gpMultiDrawMeshTasksIndirectNV = (C.GPMULTIDRAWMESHTASKSINDIRECTNV)(getProcAddr(name))
+	}
+	{
+		name := "glNamedBufferAttachMemoryNV"
+		if terminated {
+			name = "glNamedBufferAttachMemoryNV\x00"
+		}
+		gpNamedBufferAttachMemoryNV = (C.GPNAMEDBUFFERATTACHMEMORYNV)(getProcAddr(name))
+	}
+	{
+		name := "glNamedBufferPageCommitmentMemNV"
+		if terminated {
+			name = "glNamedBufferPageCommitmentMemNV\x00"
+		}
+		gpNamedBufferPageCommitmentMemNV = (C.GPNAMEDBUFFERPAGECOMMITMENTMEMNV)(getProcAddr(name))
+	}
+	{
+		name := "glNamedBufferStorageExternalEXT"
+		if terminated {
+			name = "glNamedBufferStorageExternalEXT\x00"
+		}
+		gpNamedBufferStorageExternalEXT = (C.GPNAMEDBUFFERSTORAGEEXTERNALEXT)(getProcAddr(name))
+	}
+	{
+		name := "glNamedBufferStorageMemEXT"
+		if terminated {
+			name = "glNamedBufferStorageMemEXT\x00"
+		}
+		gpNamedBufferStorageMemEXT = (C.GPNAMEDBUFFERSTORAGEMEMEXT)(getProcAddr(name))
+	}
+	{
+		name := "glNamedFramebufferSampleLocationsfvNV"
+		if terminated {
+			name = "glNamedFramebufferSampleLocationsfvNV\x00"
+		}
+		gpNamedFramebufferSampleLocationsfvNV = (C.GPNAMEDFRAMEBUFFERSAMPLELOCATIONSFVNV)(getProcAddr(name))
+	}
+	{
+		name := "glNamedFramebufferTextureMultiviewOVR"
+		if terminated {
+			name = "glNamedFramebufferTextureMultiviewOVR\x00"
+		}
+		gpNamedFramebufferTextureMultiviewOVR = (C.GPNAMEDFRAMEBUFFERTEXTUREMULTIVIEWOVR)(getProcAddr(name))
+	}
+	{
+		name := "glNamedRenderbufferStorageMultisampleAdvancedAMD"
+		if terminated {
+			name = "glNamedRenderbufferStorageMultisampleAdvancedAMD\x00"
+		}
+		gpNamedRenderbufferStorageMultisampleAdvancedAMD = (C.GPNAMEDRENDERBUFFERSTORAGEMULTISAMPLEADVANCEDAMD)(getProcAddr(name))
+	}
+	{
+		name := "glObjectLabel"
+		if terminated {
+			name = "glObjectLabel\x00"
+		}
+		gpObjectLabel = (C.GPOBJECTLABEL)(getProcAddr(name))
+		if gpObjectLabel == nil && firstMissing == "" {
+			firstMissing = "glObjectLabel"
+		}
+	}
+	{
+		name := "glObjectLabelKHR"
+		if terminated {
+			name = "glObjectLabelKHR\x00"
+		}
+		gpObjectLabelKHR = (C.GPOBJECTLABELKHR)(getProcAddr(name))
+	}
+	{
+		name := "glObjectPtrLabel"
+		if terminated {
+			name = "glObjectPtrLabel\x00"
+		}
+		gpObjectPtrLabel = (C.GPOBJECTPTRLABEL)(getProcAddr(name))
+		if gpObjectPtrLabel == nil && firstMissing == "" {
+			firstMissing = "glObjectPtrLabel"
+		}
+	}
+	{
+		name := "glObjectPtrLabelKHR"
+		if terminated {
+			name = "glObjectPtrLabelKHR\x00"
+		}
+		gpObjectPtrLabelKHR = (C.GPOBJECTPTRLABELKHR)(getProcAddr(name))
+	}
+	{
+		name := "glPatchParameteri"
+		if terminated {
+			name = "glPatchParameteri\x00"
+		}
+		gpPatchParameteri = (C.GPPATCHPARAMETERI)(getProcAddr(name))
+		if gpPatchParameteri == nil && firstMissing == "" {
+			firstMissing = "glPatchParameteri"
+		}
+	}
+	{
+		name := "glPatchParameteriEXT"
+		if terminated {
+			name = "glPatchParameteriEXT\x00"
+		}
+		gpPatchParameteriEXT = (C.GPPATCHPARAMETERIEXT)(getProcAddr(name))
+	}
+	{
+		name := "glPatchParameteriOES"
+		if terminated {
+			name = "glPatchParameteriOES\x00"
+		}
+		gpPatchParameteriOES = (C.GPPATCHPARAMETERIOES)(getProcAddr(name))
+	}
+	{
+		name := "glPathCommandsNV"
+		if terminated {
+			name = "glPathCommandsNV\x00"
+		}
+		gpPathCommandsNV = (C.GPPATHCOMMANDSNV)(getProcAddr(name))
+	}
+	{
+		name := "glPathCoordsNV"
+		if terminated {
+			name = "glPathCoordsNV\x00"
+		}
+		gpPathCoordsNV = (C.GPPATHCOORDSNV)(getProcAddr(name))
+	}
+	{
+		name := "glPathCoverDepthFuncNV"
+		if terminated {
+			name = "glPathCoverDepthFuncNV\x00"
+		}
+		gpPathCoverDepthFuncNV = (C.GPPATHCOVERDEPTHFUNCNV)(getProcAddr(name))
+	}
+	{
+		name := "glPathDashArrayNV"
+		if terminated {
+			name = "glPathDashArrayNV\x00"
+		}
+		gpPathDashArrayNV = (C.GPPATHDASHARRAYNV)(getProcAddr(name))
+	}
+	{
+		name := "glPathGlyphIndexArrayNV"
+		if terminated {
+			name = "glPathGlyphIndexArrayNV\x00"
+		}
+		gpPathGlyphIndexArrayNV = (C.GPPATHGLYPHINDEXARRAYNV)(getProcAddr(name))
+	}
+	{
+		name := "glPathGlyphIndexRangeNV"
+		if terminated {
+			name = "glPathGlyphIndexRangeNV\x00"
+		}
+		gpPathGlyphIndexRangeNV = (C.GPPATHGLYPHINDEXRANGENV)(getProcAddr(name))
+	}
+	{
+		name := "glPathGlyphRangeNV"
+		if terminated {
+			name = "glPathGlyphRangeNV\x00"
+		}
+		gpPathGlyphRangeNV = (C.GPPATHGLYPHRANGENV)(getProcAddr(name))
+	}
+	{
+		name := "glPathGlyphsNV"
+		if terminated {
+			name = "glPathGlyphsNV\x00"
+		}
+		gpPathGlyphsNV = (C.GPPATHGLYPHSNV)(getProcAddr(name))
+	}
+	{
+		name := "glPathMemoryGlyphIndexArrayNV"
+		if terminated {
+			name = "glPathMemoryGlyphIndexArrayNV\x00"
+		}
+		gpPathMemoryGlyphIndexArrayNV = (C.GPPATHMEMORYGLYPHINDEXARRAYNV)(getProcAddr(name))
+	}
+	{
+		name := "glPathParameterfNV"
+		if terminated {
+			name = "glPathParameterfNV\x00"
+		}
+		gpPathParameterfNV = (C.GPPATHPARAMETERFNV)(getProcAddr(name))
+	}
+	{
+		name := "glPathParameterfvNV"
+		if terminated {
+			name = "glPathParameterfvNV\x00"
+		}
+		gpPathParameterfvNV = (C.GPPATHPARAMETERFVNV)(getProcAddr(name))
+	}
+	{
+		name := "glPathParameteriNV"
+		if terminated {
+			name = "glPathParameteriNV\x00"
+		}
+		gpPathParameteriNV = (C.GPPATHPARAMETERINV)(getProcAddr(name))
+	}
+	{
+		name := "glPathParameterivNV"
+		if terminated {
+			name = "glPathParameterivNV\x00"
+		}
+		gpPathParameterivNV = (C.GPPATHPARAMETERIVNV)(getProcAddr(name))
+	}
+	{
+		name := "glPathStencilDepthOffsetNV"
+		if terminated {
+			name = "glPathStencilDepthOffsetNV\x00"
+		}
+		gpPathStencilDepthOffsetNV = (C.GPPATHSTENCILDEPTHOFFSETNV)(getProcAddr(name))
+	}
+	{
+		name := "glPathStencilFuncNV"
+		if terminated {
+			name = "glPathStencilFuncNV\x00"
+		}
+		gpPathStencilFuncNV = (C.GPPATHSTENCILFUNCNV)(getProcAddr(name))
+	}
+	{
+		name := "glPathStringNV"
+		if terminated {
+			name = "glPathStringNV\x00"
+		}
+		gpPathStringNV = (C.GPPATHSTRINGNV)(getProcAddr(name))
+	}
+	{
+		name := "glPathSubCommandsNV"
+		if terminated {
+			name = "glPathSubCommandsNV\x00"
+		}
+		gpPathSubCommandsNV = (C.GPPATHSUBCOMMANDSNV)(getProcAddr(name))
+	}
+	{
+		name := "glPathSubCoordsNV"
+		if terminated {
+			name = "glPathSubCoordsNV\x00"
+		}
+		gpPathSubCoordsNV = (C.GPPATHSUBCOORDSNV)(getProcAddr(name))
+	}
+	{
+		name := "glPauseTransformFeedback"
+		if terminated {
+			name = "glPauseTransformFeedback\x00"
+		}
+		gpPauseTransformFeedback = (C.GPPAUSETRANSFORMFEEDBACK)(getProcAddr(name))
+		if gpPauseTransformFeedback == nil && firstMissing == "" {
+			firstMissing = "glPauseTransformFeedback"
+		}
+	}
+	{
+		name := "glPixelStorei"
+		if terminated {
+			name = "glPixelStorei\x00"
+		}
+		gpPixelStorei = (C.GPPIXELSTOREI)(getProcAddr(name))
+		if gpPixelStorei == nil && firstMissing == "" {
+			firstMissing = "glPixelStorei"
+		}
+	}
+	{
+		name := "glPointAlongPathNV"
+		if terminated {
+			name = "glPointAlongPathNV\x00"
+		}
+		gpPointAlongPathNV = (C.GPPOINTALONGPATHNV)(getProcAddr(name))
+	}
+	{
+		name := "glPolygonModeNV"
+		if terminated {
+			name = "glPolygonModeNV\x00"
+		}
+		gpPolygonModeNV = (C.GPPOLYGONMODENV)(getProcAddr(name))
+	}
+	{
+		name := "glPolygonOffset"
+		if terminated {
+			name = "glPolygonOffset\x00"
+		}
+		gpPolygonOffset = (C.GPPOLYGONOFFSET)(getProcAddr(name))
+		if gpPolygonOffset == nil && firstMissing == "" {
+			firstMissing = "glPolygonOffset"
+		}
+	}
+	{
+		name := "glPolygonOffsetClampEXT"
+		if terminated {
+			name = "glPolygonOffsetClampEXT\x00"
+		}
+		gpPolygonOffsetClampEXT = (C.GPPOLYGONOFFSETCLAMPEXT)(getProcAddr(name))
+	}
+	{
+		name := "glPopDebugGroup"
+		if terminated {
+			name = "glPopDebugGroup\x00"
+		}
+		gpPopDebugGroup = (C.GPPOPDEBUGGROUP)(getProcAddr(name))
+		if gpPopDebugGroup == nil && firstMissing == "" {
+			firstMissing = "glPopDebugGroup"
+		}
+	}
+	{
+		name := "glPopDebugGroupKHR"
+		if terminated {
+			name = "glPopDebugGroupKHR\x00"
+		}
+		gpPopDebugGroupKHR = (C.GPPOPDEBUGGROUPKHR)(getProcAddr(name))
+	}
+	{
+		name := "glPopGroupMarkerEXT"
+		if terminated {
+			name = "glPopGroupMarkerEXT\x00"
+		}
+		gpPopGroupMarkerEXT = (C.GPPOPGROUPMARKEREXT)(getProcAddr(name))
+	}
+	{
+		name := "glPrimitiveBoundingBox"
+		if terminated {
+			name = "glPrimitiveBoundingBox\x00"
+		}
+		gpPrimitiveBoundingBox = (C.GPPRIMITIVEBOUNDINGBOX)(getProcAddr(name))
+		if gpPrimitiveBoundingBox == nil && firstMissing == "" {
+			firstMissing = "glPrimitiveBoundingBox"
+		}
+	}
+	{
+		name := "glPrimitiveBoundingBoxEXT"
+		if terminated {
+			name = "glPrimitiveBoundingBoxEXT\x00"
+		}
+		gpPrimitiveBoundingBoxEXT = (C.GPPRIMITIVEBOUNDINGBOXEXT)(getProcAddr(name))
+	}
+	{
+		name := "glPrimitiveBoundingBoxOES"
+		if terminated {
+			name = "glPrimitiveBoundingBoxOES\x00"
+		}
+		gpPrimitiveBoundingBoxOES = (C.GPPRIMITIVEBOUNDINGBOXOES)(getProcAddr(name))
+	}
+	{
+		name := "glProgramBinary"
+		if terminated {
+			name = "glProgramBinary\x00"
+		}
+		gpProgramBinary = (C.GPPROGRAMBINARY)(getProcAddr(name))
+		if gpProgramBinary == nil && firstMissing == "" {
+			firstMissing = "glProgramBinary"
+		}
+	}
+	{
+		name := "glProgramBinaryOES"
+		if terminated {
+			name = "glProgramBinaryOES\x00"
+		}
+		gpProgramBinaryOES = (C.GPPROGRAMBINARYOES)(getProcAddr(name))
+	}
+	{
+		name := "glProgramParameteri"
+		if terminated {
+			name = "glProgramParameteri\x00"
+		}
+		gpProgramParameteri = (C.GPPROGRAMPARAMETERI)(getProcAddr(name))
+		if gpProgramParameteri == nil && firstMissing == "" {
+			firstMissing = "glProgramParameteri"
+		}
+	}
+	{
+		name := "glProgramParameteriEXT"
+		if terminated {
+			name = "glProgramParameteriEXT\x00"
+		}
+		gpProgramParameteriEXT = (C.GPPROGRAMPARAMETERIEXT)(getProcAddr(name))
+	}
+	{
+		name := "glProgramPathFragmentInputGenNV"
+		if terminated {
+			name = "glProgramPathFragmentInputGenNV\x00"
+		}
+		gpProgramPathFragmentInputGenNV = (C.GPPROGRAMPATHFRAGMENTINPUTGENNV)(getProcAddr(name))
+	}
+	{
+		name := "glProgramUniform1f"
+		if terminated {
+			name = "glProgramUniform1f\x00"
+		}
+		gpProgramUniform1f = (C.GPPROGRAMUNIFORM1F)(getProcAddr(name))
+		if gpProgramUniform1f == nil && firstMissing == "" {
+			firstMissing = "glProgramUniform1f"
+		}
+	}
+	{
+		name := "glProgramUniform1fEXT"
+		if terminated {
+			name = "glProgramUniform1fEXT\x00"
+		}
+		gpProgramUniform1fEXT = (C.GPPROGRAMUNIFORM1FEXT)(getProcAddr(name))
+	}
+	{
+		name := "glProgramUniform1fv"
+		if terminated {
+			name = "glProgramUniform1fv\x00"
+		}
+		gpProgramUniform1fv = (C.GPPROGRAMUNIFORM1FV)(getProcAddr(name))
+		if gpProgramUniform1fv == nil && firstMissing == "" {
+			firstMissing = "glProgramUniform1fv"
+		}
+	}
+	{
+		name := "glProgramUniform1fvEXT"
+		if terminated {
+			name = "glProgramUniform1fvEXT\x00"
+		}
+		gpProgramUniform1fvEXT = (C.GPPROGRAMUNIFORM1FVEXT)(getProcAddr(name))
+	}
+	{
+		name := "glProgramUniform1i"
+		if terminated {
+			name = "glProgramUniform1i\x00"
+		}
+		gpProgramUniform1i = (C.GPPROGRAMUNIFORM1I)(getProcAddr(name))
+		if gpProgramUniform1i == nil && firstMissing == "" {
+			firstMissing = "glProgramUniform1i"
+		}
+	}
+	{
+		name := "glProgramUniform1i64NV"
+		if terminated {
+			name = "glProgramUniform1i64NV\x00"
+		}
+		gpProgramUniform1i64NV = (C.GPPROGRAMUNIFORM1I64NV)(getProcAddr(name))
+	}
+	{
+		name := "glProgramUniform1i64vNV"
+		if terminated {
+			name = "glProgramUniform1i64vNV\x00"
+		}
+		gpProgramUniform1i64vNV = (C.GPPROGRAMUNIFORM1I64VNV)(getProcAddr(name))
+	}
+	{
+		name := "glProgramUniform1iEXT"
+		if terminated {
+			name = "glProgramUniform1iEXT\x00"
+		}
+		gpProgramUniform1iEXT = (C.GPPROGRAMUNIFORM1IEXT)(getProcAddr(name))
+	}
+	{
+		name := "glProgramUniform1iv"
+		if terminated {
+			name = "glProgramUniform1iv\x00"
+		}
+		gpProgramUniform1iv = (C.GPPROGRAMUNIFORM1IV)(getProcAddr(name))
+		if gpProgramUniform1iv == nil && firstMissing == "" {
+			firstMissing = "glProgramUniform1iv"
+		}
+	}
+	{
+		name := "glProgramUniform1ivEXT"
+		if terminated {
+			name = "glProgramUniform1ivEXT\x00"
+		}
+		gpProgramUniform1ivEXT = (C.GPPROGRAMUNIFORM1IVEXT)(getProcAddr(name))
+	}
+	{
+		name := "glProgramUniform1ui"
+		if terminated {
+			name = "glProgramUniform1ui\x00"
+		}
+		gpProgramUniform1ui = (C.GPPROGRAMUNIFORM1UI)(getProcAddr(name))
+		if gpProgramUniform1ui == nil && firstMissing == "" {
+			firstMissing = "glProgramUniform1ui"
+		}
+	}
+	{
+		name := "glProgramUniform1ui64NV"
+		if terminated {
+			name = "glProgramUniform1ui64NV\x00"
+		}
+		gpProgramUniform1ui64NV = (C.GPPROGRAMUNIFORM1UI64NV)(getProcAddr(name))
+	}
+	{
+		name := "glProgramUniform1ui64vNV"
+		if terminated {
+			name = "glProgramUniform1ui64vNV\x00"
+		}
+		gpProgramUniform1ui64vNV = (C.GPPROGRAMUNIFORM1UI64VNV)(getProcAddr(name))
+	}
+	{
+		name := "glProgramUniform1uiEXT"
+		if terminated {
+			name = "glProgramUniform1uiEXT\x00"
+		}
+		gpProgramUniform1uiEXT = (C.GPPROGRAMUNIFORM1UIEXT)(getProcAddr(name))
+	}
+	{
+		name := "glProgramUniform1uiv"
+		if terminated {
+			name = "glProgramUniform1uiv\x00"
+		}
+		gpProgramUniform1uiv = (C.GPPROGRAMUNIFORM1UIV)(getProcAddr(name))
+		if gpProgramUniform1uiv == nil && firstMissing == "" {
+			firstMissing = "glProgramUniform1uiv"
+		}
+	}
+	{
+		name := "glProgramUniform1uivEXT"
+		if terminated {
+			name = "glProgramUniform1uivEXT\x00"
+		}
+		gpProgramUniform1uivEXT = (C.GPPROGRAMUNIFORM1UIVEXT)(getProcAddr(name))
+	}
+	{
+		name := "glProgramUniform2f"
+		if terminated {
+			name = "glProgramUniform2f\x00"
+		}
+		gpProgramUniform2f = (C.GPPROGRAMUNIFORM2F)(getProcAddr(name))
+		if gpProgramUniform2f == nil && firstMissing == "" {
+			firstMissing = "glProgramUniform2f"
+		}
+	}
+	{
+		name := "glProgramUniform2fEXT"
+		if terminated {
+			name = "glProgramUniform2fEXT\x00"
+		}
+		gpProgramUniform2fEXT = (C.GPPROGRAMUNIFORM2FEXT)(getProcAddr(name))
+	}
+	{
+		name := "glProgramUniform2fv"
+		if terminated {
+			name = "glProgramUniform2fv\x00"
+		}
+		gpProgramUniform2fv = (C.GPPROGRAMUNIFORM2FV)(getProcAddr(name))
+		if gpProgramUniform2fv == nil && firstMissing == "" {
+			firstMissing = "glProgramUniform2fv"
+		}
+	}
+	{
+		name := "glProgramUniform2fvEXT"
+		if terminated {
+			name = "glProgramUniform2fvEXT\x00"
+		}
+		gpProgramUniform2fvEXT = (C.GPPROGRAMUNIFORM2FVEXT)(getProcAddr(name))
+	}
+	{
+		name := "glProgramUniform2i"
+		if terminated {
+			name = "glProgramUniform2i\x00"
+		}
+		gpProgramUniform2i = (C.GPPROGRAMUNIFORM2I)(getProcAddr(name))
+		if gpProgramUniform2i == nil && firstMissing == "" {
+			firstMissing = "glProgramUniform2i"
+		}
+	}
+	{
+		name := "glProgramUniform2i64NV"
+		if terminated {
+			name = "glProgramUniform2i64NV\x00"
+		}
+		gpProgramUniform2i64NV = (C.GPPROGRAMUNIFORM2I64NV)(getProcAddr(name))
+	}
+	{
+		name := "glProgramUniform2i64vNV"
+		if terminated {
+			name = "glProgramUniform2i64vNV\x00"
+		}
+		gpProgramUniform2i64vNV = (C.GPPROGRAMUNIFORM2I64VNV)(getProcAddr(name))
+	}
+	{
+		name := "glProgramUniform2iEXT"
+		if terminated {
+			name = "glProgramUniform2iEXT\x00"
+		}
+		gpProgramUniform2iEXT = (C.GPPROGRAMUNIFORM2IEXT)(getProcAddr(name))
+	}
+	{
+		name := "glProgramUniform2iv"
+		if terminated {
+			name = "glProgramUniform2iv\x00"
+		}
+		gpProgramUniform2iv = (C.GPPROGRAMUNIFORM2IV)(getProcAddr(name))
+		if gpProgramUniform2iv == nil && firstMissing == "" {
+			firstMissing = "glProgramUniform2iv"
+		}
+	}
+	{
+		name := "glProgramUniform2ivEXT"
+		if terminated {
+			name = "glProgramUniform2ivEXT\x00"
+		}
+		gpProgramUniform2ivEXT = (C.GPPROGRAMUNIFORM2IVEXT)(getProcAddr(name))
+	}
+	{
+		name := "glProgramUniform2ui"
+		if terminated {
+			name = "glProgramUniform2ui\x00"
+		}
+		gpProgramUniform2ui = (C.GPPROGRAMUNIFORM2UI)(getProcAddr(name))
+		if gpProgramUniform2ui == nil && firstMissing == "" {
+			firstMissing = "glProgramUniform2ui"
+		}
+	}
+	{
+		name := "glProgramUniform2ui64NV"
+		if terminated {
+			name = "glProgramUniform2ui64NV\x00"
+		}
+		gpProgramUniform2ui64NV = (C.GPPROGRAMUNIFORM2UI64NV)(getProcAddr(name))
+	}
+	{
+		name := "glProgramUniform2ui64vNV"
+		if terminated {
+			name = "glProgramUniform2ui64vNV\x00"
+		}
+		gpProgramUniform2ui64vNV = (C.GPPROGRAMUNIFORM2UI64VNV)(getProcAddr(name))
+	}
+	{
+		name := "glProgramUniform2uiEXT"
+		if terminated {
+			name = "glProgramUniform2uiEXT\x00"
+		}
+		gpProgramUniform2uiEXT = (C.GPPROGRAMUNIFORM2UIEXT)(getProcAddr(name))
+	}
+	{
+		name := "glProgramUniform2uiv"
+		if terminated {
+			name = "glProgramUniform2uiv\x00"
+		}
+		gpProgramUniform2uiv = (C.GPPROGRAMUNIFORM2UIV)(getProcAddr(name))
+		if gpProgramUniform2uiv == nil && firstMissing == "" {
+			firstMissing = "glProgramUniform2uiv"
+		}
+	}
+	{
+		name := "glProgramUniform2uivEXT"
+		if terminated {
+			name = "glProgramUniform2uivEXT\x00"
+		}
+		gpProgramUniform2uivEXT = (C.GPPROGRAMUNIFORM2UIVEXT)(getProcAddr(name))
+	}
+	{
+		name := "glProgramUniform3f"
+		if terminated {
+			name = "glProgramUniform3f\x00"
+		}
+		gpProgramUniform3f = (C.GPPROGRAMUNIFORM3F)(getProcAddr(name))
+		if gpProgramUniform3f == nil && firstMissing == "" {
+			firstMissing = "glProgramUniform3f"
+		}
+	}
+	{
+		name := "glProgramUniform3fEXT"
+		if terminated {
+			name = "glProgramUniform3fEXT\x00"
+		}
+		gpProgramUniform3fEXT = (C.GPPROGRAMUNIFORM3FEXT)(getProcAddr(name))
+	}
+	{
+		name := "glProgramUniform3fv"
+		if terminated {
+			name = "glProgramUniform3fv\x00"
+		}
+		gpProgramUniform3fv = (C.GPPROGRAMUNIFORM3FV)(getProcAddr(name))
+		if gpProgramUniform3fv == nil && firstMissing == "" {
+			firstMissing = "glProgramUniform3fv"
+		}
+	}
+	{
+		name := "glProgramUniform3fvEXT"
+		if terminated {
+			name = "glProgramUniform3fvEXT\x00"
+		}
+		gpProgramUniform3fvEXT = (C.GPPROGRAMUNIFORM3FVEXT)(getProcAddr(name))
+	}
+	{
+		name := "glProgramUniform3i"
+		if terminated {
+			name = "glProgramUniform3i\x00"
+		}
+		gpProgramUniform3i = (C.GPPROGRAMUNIFORM3I)(getProcAddr(name))
+		if gpProgramUniform3i == nil && firstMissing == "" {
+			firstMissing = "glProgramUniform3i"
+		}
+	}
+	{
+		name := "glProgramUniform3i64NV"
+		if terminated {
+			name = "glProgramUniform3i64NV\x00"
+		}
+		gpProgramUniform3i64NV = (C.GPPROGRAMUNIFORM3I64NV)(getProcAddr(name))
+	}
+	{
+		name := "glProgramUniform3i64vNV"
+		if terminated {
+			name = "glProgramUniform3i64vNV\x00"
+		}
+		gpProgramUniform3i64vNV = (C.GPPROGRAMUNIFORM3I64VNV)(getProcAddr(name))
+	}
+	{
+		name := "glProgramUniform3iEXT"
+		if terminated {
+			name = "glProgramUniform3iEXT\x00"
+		}
+		gpProgramUniform3iEXT = (C.GPPROGRAMUNIFORM3IEXT)(getProcAddr(name))
+	}
+	{
+		name := "glProgramUniform3iv"
+		if terminated {
+			name = "glProgramUniform3iv\x00"
+		}
+		gpProgramUniform3iv = (C.GPPROGRAMUNIFORM3IV)(getProcAddr(name))
+		if gpProgramUniform3iv == nil && firstMissing == "" {
+			firstMissing = "glProgramUniform3iv"
+		}
+	}
+	{
+		name := "glProgramUniform3ivEXT"
+		if terminated {
+			name = "glProgramUniform3ivEXT\x00"
+		}
+		gpProgramUniform3ivEXT = (C.GPPROGRAMUNIFORM3IVEXT)(getProcAddr(name))
+	}
+	{
+		name := "glProgramUniform3ui"
+		if terminated {
+			name = "glProgramUniform3ui\x00"
+		}
+		gpProgramUniform3ui = (C.GPPROGRAMUNIFORM3UI)(getProcAddr(name))
+		if gpProgramUniform3ui == nil && firstMissing == "" {
+			firstMissing = "glProgramUniform3ui"
+		}
+	}
+	{
+		name := "glProgramUniform3ui64NV"
+		if terminated {
+			name = "glProgramUniform3ui64NV\x00"
+		}
+		gpProgramUniform3ui64NV = (C.GPPROGRAMUNIFORM3UI64NV)(getProcAddr(name))
+	}
+	{
+		name := "glProgramUniform3ui64vNV"
+		if terminated {
+			name = "glProgramUniform3ui64vNV\x00"
+		}
+		gpProgramUniform3ui64vNV = (C.GPPROGRAMUNIFORM3UI64VNV)(getProcAddr(name))
+	}
+	{
+		name := "glProgramUniform3uiEXT"
+		if terminated {
+			name = "glProgramUniform3uiEXT\x00"
+		}
+		gpProgramUniform3uiEXT = (C.GPPROGRAMUNIFORM3UIEXT)(getProcAddr(name))
+	}
+	{
+		name := "glProgramUniform3uiv"
+		if terminated {
+			name = "glProgramUniform3uiv\x00"
+		}
+		gpProgramUniform3uiv = (C.GPPROGRAMUNIFORM3UIV)(getProcAddr(name))
+		if gpProgramUniform3uiv == nil && firstMissing == "" {
+			firstMissing = "glProgramUniform3uiv"
+		}
+	}
+	{
+		name := "glProgramUniform3uivEXT"
+		if terminated {
+			name = "glProgramUniform3uivEXT\x00"
+		}
+		gpProgramUniform3uivEXT = (C.GPPROGRAMUNIFORM3UIVEXT)(getProcAddr(name))
+	}
+	{
+		name := "glProgramUniform4f"
+		if terminated {
+			name = "glProgramUniform4f\x00"
+		}
+		gpProgramUniform4f = (C.GPPROGRAMUNIFORM4F)(getProcAddr(name))
+		if gpProgramUniform4f == nil && firstMissing == "" {
+			firstMissing = "glProgramUniform4f"
+		}
+	}
+	{
+		name := "glProgramUniform4fEXT"
+		if terminated {
+			name = "glProgramUniform4fEXT\x00"
+		}
+		gpProgramUniform4fEXT = (C.GPPROGRAMUNIFORM4FEXT)(getProcAddr(name))
+	}
+	{
+		name := "glProgramUniform4fv"
+		if terminated {
+			name = "glProgramUniform4fv\x00"
+		}
+		gpProgramUniform4fv = (C.GPPROGRAMUNIFORM4FV)(getProcAddr(name))
+		if gpProgramUniform4fv == nil && firstMissing == "" {
+			firstMissing = "glProgramUniform4fv"
+		}
+	}
+	{
+		name := "glProgramUniform4fvEXT"
+		if terminated {
+			name = "glProgramUniform4fvEXT\x00"
+		}
+		gpProgramUniform4fvEXT = (C.GPPROGRAMUNIFORM4FVEXT)(getProcAddr(name))
+	}
+	{
+		name := "glProgramUniform4i"
+		if terminated {
+			name = "glProgramUniform4i\x00"
+		}
+		gpProgramUniform4i = (C.GPPROGRAMUNIFORM4I)(getProcAddr(name))
+		if gpProgramUniform4i == nil && firstMissing == "" {
+			firstMissing = "glProgramUniform4i"
+		}
+	}
+	{
+		name := "glProgramUniform4i64NV"
+		if terminated {
+			name = "glProgramUniform4i64NV\x00"
+		}
+		gpProgramUniform4i64NV = (C.GPPROGRAMUNIFORM4I64NV)(getProcAddr(name))
+	}
+	{
+		name := "glProgramUniform4i64vNV"
+		if terminated {
+			name = "glProgramUniform4i64vNV\x00"
+		}
+		gpProgramUniform4i64vNV = (C.GPPROGRAMUNIFORM4I64VNV)(getProcAddr(name))
+	}
+	{
+		name := "glProgramUniform4iEXT"
+		if terminated {
+			name = "glProgramUniform4iEXT\x00"
+		}
+		gpProgramUniform4iEXT = (C.GPPROGRAMUNIFORM4IEXT)(getProcAddr(name))
+	}
+	{
+		name := "glProgramUniform4iv"
+		if terminated {
+			name = "glProgramUniform4iv\x00"
+		}
+		gpProgramUniform4iv = (C.GPPROGRAMUNIFORM4IV)(getProcAddr(name))
+		if gpProgramUniform4iv == nil && firstMissing == "" {
+			firstMissing = "glProgramUniform4iv"
+		}
+	}
+	{
+		name := "glProgramUniform4ivEXT"
+		if terminated {
+			name = "glProgramUniform4ivEXT\x00"
+		}
+		gpProgramUniform4ivEXT = (C.GPPROGRAMUNIFORM4IVEXT)(getProcAddr(name))
+	}
+	{
+		name := "glProgramUniform4ui"
+		if terminated {
+			name = "glProgramUniform4ui\x00"
+		}
+		gpProgramUniform4ui = (C.GPPROGRAMUNIFORM4UI)(getProcAddr(name))
+		if gpProgramUniform4ui == nil && firstMissing == "" {
+			firstMissing = "glProgramUniform4ui"
+		}
+	}
+	{
+		name := "glProgramUniform4ui64NV"
+		if terminated {
+			name = "glProgramUniform4ui64NV\x00"
+		}
+		gpProgramUniform4ui64NV = (C.GPPROGRAMUNIFORM4UI64NV)(getProcAddr(name))
+	}
+	{
+		name := "glProgramUniform4ui64vNV"
+		if terminated {
+			name = "glProgramUniform4ui64vNV\x00"
+		}
+		gpProgramUniform4ui64vNV = (C.GPPROGRAMUNIFORM4UI64VNV)(getProcAddr(name))
+	}
+	{
+		name := "glProgramUniform4uiEXT"
+		if terminated {
+			name = "glProgramUniform4uiEXT\x00"
+		}
+		gpProgramUniform4uiEXT = (C.GPPROGRAMUNIFORM4UIEXT)(getProcAddr(name))
+	}
+	{
+		name := "glProgramUniform4uiv"
+		if terminated {
+			name = "glProgramUniform4uiv\x00"
+		}
+		gpProgramUniform4uiv = (C.GPPROGRAMUNIFORM4UIV)(getProcAddr(name))
+		if gpProgramUniform4uiv == nil && firstMissing == "" {
+			firstMissing = "glProgramUniform4uiv"
+		}
+	}
+	{
+		name := "glProgramUniform4uivEXT"
+		if terminated {
+			name = "glProgramUniform4uivEXT\x00"
+		}
+		gpProgramUniform4uivEXT = (C.GPPROGRAMUNIFORM4UIVEXT)(getProcAddr(name))
+	}
+	{
+		name := "glProgramUniformHandleui64IMG"
+		if terminated {
+			name = "glProgramUniformHandleui64IMG\x00"
+		}
+		gpProgramUniformHandleui64IMG = (C.GPPROGRAMUNIFORMHANDLEUI64IMG)(getProcAddr(name))
+	}
+	{
+		name := "glProgramUniformHandleui64NV"
+		if terminated {
+			name = "glProgramUniformHandleui64NV\x00"
+		}
+		gpProgramUniformHandleui64NV = (C.GPPROGRAMUNIFORMHANDLEUI64NV)(getProcAddr(name))
+	}
+	{
+		name := "glProgramUniformHandleui64vIMG"
+		if terminated {
+			name = "glProgramUniformHandleui64vIMG\x00"
+		}
+		gpProgramUniformHandleui64vIMG = (C.GPPROGRAMUNIFORMHANDLEUI64VIMG)(getProcAddr(name))
+	}
+	{
+		name := "glProgramUniformHandleui64vNV"
+		if terminated {
+			name = "glProgramUniformHandleui64vNV\x00"
+		}
+		gpProgramUniformHandleui64vNV = (C.GPPROGRAMUNIFORMHANDLEUI64VNV)(getProcAddr(name))
+	}
+	{
+		name := "glProgramUniformMatrix2fv"
+		if terminated {
+			name = "glProgramUniformMatrix2fv\x00"
+		}
+		gpProgramUniformMatrix2fv = (C.GPPROGRAMUNIFORMMATRIX2FV)(getProcAddr(name))
+		if gpProgramUniformMatrix2fv == nil && firstMissing == "" {
+			firstMissing = "glProgramUniformMatrix2fv"
+		}
+	}
+	{
+		name := "glProgramUniformMatrix2fvEXT"
+		if terminated {
+			name = "glProgramUniformMatrix2fvEXT\x00"
+		}
+		gpProgramUniformMatrix2fvEXT = (C.GPPROGRAMUNIFORMMATRIX2FVEXT)(getProcAddr(name))
+	}
+	{
+		name := "glProgramUniformMatrix2x3fv"
+		if terminated {
+			name = "glProgramUniformMatrix2x3fv\x00"
+		}
+		gpProgramUniformMatrix2x3fv = (C.GPPROGRAMUNIFORMMATRIX2X3FV)(getProcAddr(name))
+		if gpProgramUniformMatrix2x3fv == nil && firstMissing == "" {
+			firstMissing = "glProgramUniformMatrix2x3fv"
+		}
+	}
+	{
+		name := "glProgramUniformMatrix2x3fvEXT"
+		if terminated {
+			name = "glProgramUniformMatrix2x3fvEXT\x00"
+		}
+		gpProgramUniformMatrix2x3fvEXT = (C.GPPROGRAMUNIFORMMATRIX2X3FVEXT)(getProcAddr(name))
+	}
+	{
+		name := "glProgramUniformMatrix2x4fv"
+		if terminated {
+			name = "glProgramUniformMatrix2x4fv\x00"
+		}
+		gpProgramUniformMatrix2x4fv = (C.GPPROGRAMUNIFORMMATRIX2X4FV)(getProcAddr(name))
+		if gpProgramUniformMatrix2x4fv == nil && firstMissing == "" {
+			firstMissing = "glProgramUniformMatrix2x4fv"
+		}
+	}
+	{
+		name := "glProgramUniformMatrix2x4fvEXT"
+		if terminated {
+			name = "glProgramUniformMatrix2x4fvEXT\x00"
+		}
+		gpProgramUniformMatrix2x4fvEXT = (C.GPPROGRAMUNIFORMMATRIX2X4FVEXT)(getProcAddr(name))
+	}
+	{
+		name := "glProgramUniformMatrix3fv"
+		if terminated {
+			name = "glProgramUniformMatrix3fv\x00"
+		}
+		gpProgramUniformMatrix3fv = (C.GPPROGRAMUNIFORMMATRIX3FV)(getProcAddr(name))
+		if gpProgramUniformMatrix3fv == nil && firstMissing == "" {
+			firstMissing = "glProgramUniformMatrix3fv"
+		}
+	}
+	{
+		name := "glProgramUniformMatrix3fvEXT"
+		if terminated {
+			name = "glProgramUniformMatrix3fvEXT\x00"
+		}
+		gpProgramUniformMatrix3fvEXT = (C.GPPROGRAMUNIFORMMATRIX3FVEXT)(getProcAddr(name))
+	}
+	{
+		name := "glProgramUniformMatrix3x2fv"
+		if terminated {
+			name = "glProgramUniformMatrix3x2fv\x00"
+		}
+		gpProgramUniformMatrix3x2fv = (C.GPPROGRAMUNIFORMMATRIX3X2FV)(getProcAddr(name))
+		if gpProgramUniformMatrix3x2fv == nil && firstMissing == "" {
+			firstMissing = "glProgramUniformMatrix3x2fv"
+		}
+	}
+	{
+		name := "glProgramUniformMatrix3x2fvEXT"
+		if terminated {
+			name = "glProgramUniformMatrix3x2fvEXT\x00"
+		}
+		gpProgramUniformMatrix3x2fvEXT = (C.GPPROGRAMUNIFORMMATRIX3X2FVEXT)(getProcAddr(name))
+	}
+	{
+		name := "glProgramUniformMatrix3x4fv"
+		if terminated {
+			name = "glProgramUniformMatrix3x4fv\x00"
+		}
+		gpProgramUniformMatrix3x4fv = (C.GPPROGRAMUNIFORMMATRIX3X4FV)(getProcAddr(name))
+		if gpProgramUniformMatrix3x4fv == nil && firstMissing == "" {
+			firstMissing = "glProgramUniformMatrix3x4fv"
+		}
+	}
+	{
+		name := "glProgramUniformMatrix3x4fvEXT"
+		if terminated {
+			name = "glProgramUniformMatrix3x4fvEXT\x00"
+		}
+		gpProgramUniformMatrix3x4fvEXT = (C.GPPROGRAMUNIFORMMATRIX3X4FVEXT)(getProcAddr(name))
+	}
+	{
+		name := "glProgramUniformMatrix4fv"
+		if terminated {
+			name = "glProgramUniformMatrix4fv\x00"
+		}
+		gpProgramUniformMatrix4fv = (C.GPPROGRAMUNIFORMMATRIX4FV)(getProcAddr(name))
+		if gpProgramUniformMatrix4fv == nil && firstMissing == "" {
+			firstMissing = "glProgramUniformMatrix4fv"
+		}
+	}
+	{
+		name := "glProgramUniformMatrix4fvEXT"
+		if terminated {
+			name = "glProgramUniformMatrix4fvEXT\x00"
+		}
+		gpProgramUniformMatrix4fvEXT = (C.GPPROGRAMUNIFORMMATRIX4FVEXT)(getProcAddr(name))
+	}
+	{
+		name := "glProgramUniformMatrix4x2fv"
+		if terminated {
+			name = "glProgramUniformMatrix4x2fv\x00"
+		}
+		gpProgramUniformMatrix4x2fv = (C.GPPROGRAMUNIFORMMATRIX4X2FV)(getProcAddr(name))
+		if gpProgramUniformMatrix4x2fv == nil && firstMissing == "" {
+			firstMissing = "glProgramUniformMatrix4x2fv"
+		}
+	}
+	{
+		name := "glProgramUniformMatrix4x2fvEXT"
+		if terminated {
+			name = "glProgramUniformMatrix4x2fvEXT\x00"
+		}
+		gpProgramUniformMatrix4x2fvEXT = (C.GPPROGRAMUNIFORMMATRIX4X2FVEXT)(getProcAddr(name))
+	}
+	{
+		name := "glProgramUniformMatrix4x3fv"
+		if terminated {
+			name = "glProgramUniformMatrix4x3fv\x00"
+		}
+		gpProgramUniformMatrix4x3fv = (C.GPPROGRAMUNIFORMMATRIX4X3FV)(getProcAddr(name))
+		if gpProgramUniformMatrix4x3fv == nil && firstMissing == "" {
+			firstMissing = "glProgramUniformMatrix4x3fv"
+		}
+	}
+	{
+		name := "glProgramUniformMatrix4x3fvEXT"
+		if terminated {
+			name = "glProgramUniformMatrix4x3fvEXT\x00"
+		}
+		gpProgramUniformMatrix4x3fvEXT = (C.GPPROGRAMUNIFORMMATRIX4X3FVEXT)(getProcAddr(name))
+	}
+	{
+		name := "glPushDebugGroup"
+		if terminated {
+			name = "glPushDebugGroup\x00"
+		}
+		gpPushDebugGroup = (C.GPPUSHDEBUGGROUP)(getProcAddr(name))
+		if gpPushDebugGroup == nil && firstMissing == "" {
+			firstMissing = "glPushDebugGroup"
+		}
+	}
+	{
+		name := "glPushDebugGroupKHR"
+		if terminated {
+			name = "glPushDebugGroupKHR\x00"
+		}
+		gpPushDebugGroupKHR = (C.GPPUSHDEBUGGROUPKHR)(getProcAddr(name))
+	}
+	{
+		name := "glPushGroupMarkerEXT"
+		if terminated {
+			name = "glPushGroupMarkerEXT\x00"
+		}
+		gpPushGroupMarkerEXT = (C.GPPUSHGROUPMARKEREXT)(getProcAddr(name))
+	}
+	{
+		name := "glQueryCounterEXT"
+		if terminated {
+			name = "glQueryCounterEXT\x00"
+		}
+		gpQueryCounterEXT = (C.GPQUERYCOUNTEREXT)(getProcAddr(name))
+	}
+	{
+		name := "glRasterSamplesEXT"
+		if terminated {
+			name = "glRasterSamplesEXT\x00"
+		}
+		gpRasterSamplesEXT = (C.GPRASTERSAMPLESEXT)(getProcAddr(name))
+	}
+	{
+		name := "glReadBuffer"
+		if terminated {
+			name = "glReadBuffer\x00"
+		}
+		gpReadBuffer = (C.GPREADBUFFER)(getProcAddr(name))
+		if gpReadBuffer == nil && firstMissing == "" {
+			firstMissing = "glReadBuffer"
+		}
+	}
+	{
+		name := "glReadBufferIndexedEXT"
+		if terminated {
+			name = "glReadBufferIndexedEXT\x00"
+		}
+		gpReadBufferIndexedEXT = (C.GPREADBUFFERINDEXEDEXT)(getProcAddr(name))
+	}
+	{
+		name := "glReadBufferNV"
+		if terminated {
+			name = "glReadBufferNV\x00"
+		}
+		gpReadBufferNV = (C.GPREADBUFFERNV)(getProcAddr(name))
+	}
+	{
+		name := "glReadPixels"
+		if terminated {
+			name = "glReadPixels\x00"
+		}
+		gpReadPixels = (C.GPREADPIXELS)(getProcAddr(name))
+		if gpReadPixels == nil && firstMissing == "" {
+			firstMissing = "glReadPixels"
+		}
+	}
+	{
+		name := "glReadnPixels"
+		if terminated {
+			name = "glReadnPixels\x00"
+		}
+		gpReadnPixels = (C.GPREADNPIXELS)(getProcAddr(name))
+		if gpReadnPixels == nil && firstMissing == "" {
+			firstMissing = "glReadnPixels"
+		}
+	}
+	{
+		name := "glReadnPixelsEXT"
+		if terminated {
+			name = "glReadnPixelsEXT\x00"
+		}
+		gpReadnPixelsEXT = (C.GPREADNPIXELSEXT)(getProcAddr(name))
+	}
+	{
+		name := "glReadnPixelsKHR"
+		if terminated {
+			name = "glReadnPixelsKHR\x00"
+		}
+		gpReadnPixelsKHR = (C.GPREADNPIXELSKHR)(getProcAddr(name))
+	}
+	{
+		name := "glReleaseKeyedMutexWin32EXT"
+		if terminated {
+			name = "glReleaseKeyedMutexWin32EXT\x00"
+		}
+		gpReleaseKeyedMutexWin32EXT = (C.GPRELEASEKEYEDMUTEXWIN32EXT)(getProcAddr(name))
+	}
+	{
+		name := "glReleaseShaderCompiler"
+		if terminated {
+			name = "glReleaseShaderCompiler\x00"
+		}
+		gpReleaseShaderCompiler = (C.GPRELEASESHADERCOMPILER)(getProcAddr(name))
+		if gpReleaseShaderCompiler == nil && firstMissing == "" {
+			firstMissing = "glReleaseShaderCompiler"
+		}
+	}
+	{
+		name := "glRenderbufferStorage"
+		if terminated {
+			name = "glRenderbufferStorage\x00"
+		}
+		gpRenderbufferStorage = (C.GPRENDERBUFFERSTORAGE)(getProcAddr(name))
+		if gpRenderbufferStorage == nil && firstMissing == "" {
+			firstMissing = "glRenderbufferStorage"
+		}
+	}
+	{
+		name := "glRenderbufferStorageMultisample"
+		if terminated {
+			name = "glRenderbufferStorageMultisample\x00"
+		}
+		gpRenderbufferStorageMultisample = (C.GPRENDERBUFFERSTORAGEMULTISAMPLE)(getProcAddr(name))
+		if gpRenderbufferStorageMultisample == nil && firstMissing == "" {
+			firstMissing = "glRenderbufferStorageMultisample"
+		}
+	}
+	{
+		name := "glRenderbufferStorageMultisampleANGLE"
+		if terminated {
+			name = "glRenderbufferStorageMultisampleANGLE\x00"
+		}
+		gpRenderbufferStorageMultisampleANGLE = (C.GPRENDERBUFFERSTORAGEMULTISAMPLEANGLE)(getProcAddr(name))
+	}
+	{
+		name := "glRenderbufferStorageMultisampleAPPLE"
+		if terminated {
+			name = "glRenderbufferStorageMultisampleAPPLE\x00"
+		}
+		gpRenderbufferStorageMultisampleAPPLE = (C.GPRENDERBUFFERSTORAGEMULTISAMPLEAPPLE)(getProcAddr(name))
+	}
+	{
+		name := "glRenderbufferStorageMultisampleAdvancedAMD"
+		if terminated {
+			name = "glRenderbufferStorageMultisampleAdvancedAMD\x00"
+		}
+		gpRenderbufferStorageMultisampleAdvancedAMD = (C.GPRENDERBUFFERSTORAGEMULTISAMPLEADVANCEDAMD)(getProcAddr(name))
+	}
+	{
+		name := "glRenderbufferStorageMultisampleEXT"
+		if terminated {
+			name = "glRenderbufferStorageMultisampleEXT\x00"
+		}
+		gpRenderbufferStorageMultisampleEXT = (C.GPRENDERBUFFERSTORAGEMULTISAMPLEEXT)(getProcAddr(name))
+	}
+	{
+		name := "glRenderbufferStorageMultisampleIMG"
+		if terminated {
+			name = "glRenderbufferStorageMultisampleIMG\x00"
+		}
+		gpRenderbufferStorageMultisampleIMG = (C.GPRENDERBUFFERSTORAGEMULTISAMPLEIMG)(getProcAddr(name))
+	}
+	{
+		name := "glRenderbufferStorageMultisampleNV"
+		if terminated {
+			name = "glRenderbufferStorageMultisampleNV\x00"
+		}
+		gpRenderbufferStorageMultisampleNV = (C.GPRENDERBUFFERSTORAGEMULTISAMPLENV)(getProcAddr(name))
+	}
+	{
+		name := "glResetMemoryObjectParameterNV"
+		if terminated {
+			name = "glResetMemoryObjectParameterNV\x00"
+		}
+		gpResetMemoryObjectParameterNV = (C.GPRESETMEMORYOBJECTPARAMETERNV)(getProcAddr(name))
+	}
+	{
+		name := "glResolveDepthValuesNV"
+		if terminated {
+			name = "glResolveDepthValuesNV\x00"
+		}
+		gpResolveDepthValuesNV = (C.GPRESOLVEDEPTHVALUESNV)(getProcAddr(name))
+	}
+	{
+		name := "glResolveMultisampleFramebufferAPPLE"
+		if terminated {
+			name = "glResolveMultisampleFramebufferAPPLE\x00"
+		}
+		gpResolveMultisampleFramebufferAPPLE = (C.GPRESOLVEMULTISAMPLEFRAMEBUFFERAPPLE)(getProcAddr(name))
+	}
+	{
+		name := "glResumeTransformFeedback"
+		if terminated {
+			name = "glResumeTransformFeedback\x00"
+		}
+		gpResumeTransformFeedback = (C.GPRESUMETRANSFORMFEEDBACK)(getProcAddr(name))
+		if gpResumeTransformFeedback == nil && firstMissing == "" {
+			firstMissing = "glResumeTransformFeedback"
+		}
+	}
+	{
+		name := "glSampleCoverage"
+		if terminated {
+			name = "glSampleCoverage\x00"
+		}
+		gpSampleCoverage = (C.GPSAMPLECOVERAGE)(getProcAddr(name))
+		if gpSampleCoverage == nil && firstMissing == "" {
+			firstMissing = "glSampleCoverage"
+		}
+	}
+	{
+		name := "glSampleMaski"
+		if terminated {
+			name = "glSampleMaski\x00"
+		}
+		gpSampleMaski = (C.GPSAMPLEMASKI)(getProcAddr(name))
+		if gpSampleMaski == nil && firstMissing == "" {
+			firstMissing = "glSampleMaski"
+		}
+	}
+	{
+		name := "glSamplerParameterIiv"
+		if terminated {
+			name = "glSamplerParameterIiv\x00"
+		}
+		gpSamplerParameterIiv = (C.GPSAMPLERPARAMETERIIV)(getProcAddr(name))
+		if gpSamplerParameterIiv == nil && firstMissing == "" {
+			firstMissing = "glSamplerParameterIiv"
+		}
+	}
+	{
+		name := "glSamplerParameterIivEXT"
+		if terminated {
+			name = "glSamplerParameterIivEXT\x00"
+		}
+		gpSamplerParameterIivEXT = (C.GPSAMPLERPARAMETERIIVEXT)(getProcAddr(name))
+	}
+	{
+		name := "glSamplerParameterIivOES"
+		if terminated {
+			name = "glSamplerParameterIivOES\x00"
+		}
+		gpSamplerParameterIivOES = (C.GPSAMPLERPARAMETERIIVOES)(getProcAddr(name))
+	}
+	{
+		name := "glSamplerParameterIuiv"
+		if terminated {
+			name = "glSamplerParameterIuiv\x00"
+		}
+		gpSamplerParameterIuiv = (C.GPSAMPLERPARAMETERIUIV)(getProcAddr(name))
+		if gpSamplerParameterIuiv == nil && firstMissing == "" {
+			firstMissing = "glSamplerParameterIuiv"
+		}
+	}
+	{
+		name := "glSamplerParameterIuivEXT"
+		if terminated {
+			name = "glSamplerParameterIuivEXT\x00"
+		}
+		gpSamplerParameterIuivEXT = (C.GPSAMPLERPARAMETERIUIVEXT)(getProcAddr(name))
+	}
+	{
+		name := "glSamplerParameterIuivOES"
+		if terminated {
+			name = "glSamplerParameterIuivOES\x00"
+		}
+		gpSamplerParameterIuivOES = (C.GPSAMPLERPARAMETERIUIVOES)(getProcAddr(name))
+	}
+	{
+		name := "glSamplerParameterf"
+		if terminated {
+			name = "glSamplerParameterf\x00"
+		}
+		gpSamplerParameterf = (C.GPSAMPLERPARAMETERF)(getProcAddr(name))
+		if gpSamplerParameterf == nil && firstMissing == "" {
+			firstMissing = "glSamplerParameterf"
+		}
+	}
+	{
+		name := "glSamplerParameterfv"
+		if terminated {
+			name = "glSamplerParameterfv\x00"
+		}
+		gpSamplerParameterfv = (C.GPSAMPLERPARAMETERFV)(getProcAddr(name))
+		if gpSamplerParameterfv == nil && firstMissing == "" {
+			firstMissing = "glSamplerParameterfv"
+		}
+	}
+	{
+		name := "glSamplerParameteri"
+		if terminated {
+			name = "glSamplerParameteri\x00"
+		}
+		gpSamplerParameteri = (C.GPSAMPLERPARAMETERI)(getProcAddr(name))
+		if gpSamplerParameteri == nil && firstMissing == "" {
+			firstMissing = "glSamplerParameteri"
+		}
+	}
+	{
+		name := "glSamplerParameteriv"
+		if terminated {
+			name = "glSamplerParameteriv\x00"
+		}
+		gpSamplerParameteriv = (C.GPSAMPLERPARAMETERIV)(getProcAddr(name))
+		if gpSamplerParameteriv == nil && firstMissing == "" {
+			firstMissing = "glSamplerParameteriv"
+		}
+	}
+	{
+		name := "glScissor"
+		if terminated {
+			name = "glScissor\x00"
+		}
+		gpScissor = (C.GPSCISSOR)(getProcAddr(name))
+		if gpScissor == nil && firstMissing == "" {
+			firstMissing = "glScissor"
+		}
+	}
+	{
+		name := "glScissorArrayvNV"
+		if terminated {
+			name = "glScissorArrayvNV\x00"
+		}
+		gpScissorArrayvNV = (C.GPSCISSORARRAYVNV)(getProcAddr(name))
+	}
+	{
+		name := "glScissorArrayvOES"
+		if terminated {
+			name = "glScissorArrayvOES\x00"
+		}
+		gpScissorArrayvOES = (C.GPSCISSORARRAYVOES)(getProcAddr(name))
+	}
+	{
+		name := "glScissorExclusiveArrayvNV"
+		if terminated {
+			name = "glScissorExclusiveArrayvNV\x00"
+		}
+		gpScissorExclusiveArrayvNV = (C.GPSCISSOREXCLUSIVEARRAYVNV)(getProcAddr(name))
+	}
+	{
+		name := "glScissorExclusiveNV"
+		if terminated {
+			name = "glScissorExclusiveNV\x00"
+		}
+		gpScissorExclusiveNV = (C.GPSCISSOREXCLUSIVENV)(getProcAddr(name))
+	}
+	{
+		name := "glScissorIndexedNV"
+		if terminated {
+			name = "glScissorIndexedNV\x00"
+		}
+		gpScissorIndexedNV = (C.GPSCISSORINDEXEDNV)(getProcAddr(name))
+	}
+	{
+		name := "glScissorIndexedOES"
+		if terminated {
+			name = "glScissorIndexedOES\x00"
+		}
+		gpScissorIndexedOES = (C.GPSCISSORINDEXEDOES)(getProcAddr(name))
+	}
+	{
+		name := "glScissorIndexedvNV"
+		if terminated {
+			name = "glScissorIndexedvNV\x00"
+		}
+		gpScissorIndexedvNV = (C.GPSCISSORINDEXEDVNV)(getProcAddr(name))
+	}
+	{
+		name := "glScissorIndexedvOES"
+		if terminated {
+			name = "glScissorIndexedvOES\x00"
+		}
+		gpScissorIndexedvOES = (C.GPSCISSORINDEXEDVOES)(getProcAddr(name))
+	}
+	{
+		name := "glSelectPerfMonitorCountersAMD"
+		if terminated {
+			name = "glSelectPerfMonitorCountersAMD\x00"
+		}
+		gpSelectPerfMonitorCountersAMD = (C.GPSELECTPERFMONITORCOUNTERSAMD)(getProcAddr(name))
+	}
+	{
+		name := "glSemaphoreParameterivNV"
+		if terminated {
+			name = "glSemaphoreParameterivNV\x00"
+		}
+		gpSemaphoreParameterivNV = (C.GPSEMAPHOREPARAMETERIVNV)(getProcAddr(name))
+	}
+	{
+		name := "glSemaphoreParameterui64vEXT"
+		if terminated {
+			name = "glSemaphoreParameterui64vEXT\x00"
+		}
+		gpSemaphoreParameterui64vEXT = (C.GPSEMAPHOREPARAMETERUI64VEXT)(getProcAddr(name))
+	}
+	{
+		name := "glSetFenceNV"
+		if terminated {
+			name = "glSetFenceNV\x00"
+		}
+		gpSetFenceNV = (C.GPSETFENCENV)(getProcAddr(name))
+	}
+	{
+		name := "glShaderBinary"
+		if terminated {
+			name = "glShaderBinary\x00"
+		}
+		gpShaderBinary = (C.GPSHADERBINARY)(getProcAddr(name))
+		if gpShaderBinary == nil && firstMissing == "" {
+			firstMissing = "glShaderBinary"
+		}
+	}
+	{
+		name := "glShaderSource"
+		if terminated {
+			name = "glShaderSource\x00"
+		}
+		gpShaderSource = (C.GPSHADERSOURCE)(getProcAddr(name))
+		if gpShaderSource == nil && firstMissing == "" {
+			firstMissing = "glShaderSource"
+		}
+	}
+	{
+		name := "glShadingRateCombinerOpsEXT"
+		if terminated {
+			name = "glShadingRateCombinerOpsEXT\x00"
+		}
+		gpShadingRateCombinerOpsEXT = (C.GPSHADINGRATECOMBINEROPSEXT)(getProcAddr(name))
+	}
+	{
+		name := "glShadingRateEXT"
+		if terminated {
+			name = "glShadingRateEXT\x00"
+		}
+		gpShadingRateEXT = (C.GPSHADINGRATEEXT)(getProcAddr(name))
+	}
+	{
+		name := "glShadingRateImageBarrierNV"
+		if terminated {
+			name = "glShadingRateImageBarrierNV\x00"
+		}
+		gpShadingRateImageBarrierNV = (C.GPSHADINGRATEIMAGEBARRIERNV)(getProcAddr(name))
+	}
+	{
+		name := "glShadingRateImagePaletteNV"
+		if terminated {
+			name = "glShadingRateImagePaletteNV\x00"
+		}
+		gpShadingRateImagePaletteNV = (C.GPSHADINGRATEIMAGEPALETTENV)(getProcAddr(name))
+	}
+	{
+		name := "glShadingRateQCOM"
+		if terminated {
+			name = "glShadingRateQCOM\x00"
+		}
+		gpShadingRateQCOM = (C.GPSHADINGRATEQCOM)(getProcAddr(name))
+	}
+	{
+		name := "glShadingRateSampleOrderCustomNV"
+		if terminated {
+			name = "glShadingRateSampleOrderCustomNV\x00"
+		}
+		gpShadingRateSampleOrderCustomNV = (C.GPSHADINGRATESAMPLEORDERCUSTOMNV)(getProcAddr(name))
+	}
+	{
+		name := "glShadingRateSampleOrderNV"
+		if terminated {
+			name = "glShadingRateSampleOrderNV\x00"
+		}
+		gpShadingRateSampleOrderNV = (C.GPSHADINGRATESAMPLEORDERNV)(getProcAddr(name))
+	}
+	{
+		name := "glSignalSemaphoreEXT"
+		if terminated {
+			name = "glSignalSemaphoreEXT\x00"
+		}
+		gpSignalSemaphoreEXT = (C.GPSIGNALSEMAPHOREEXT)(getProcAddr(name))
+	}
+	{
+		name := "glSignalVkFenceNV"
+		if terminated {
+			name = "glSignalVkFenceNV\x00"
+		}
+		gpSignalVkFenceNV = (C.GPSIGNALVKFENCENV)(getProcAddr(name))
+	}
+	{
+		name := "glSignalVkSemaphoreNV"
+		if terminated {
+			name = "glSignalVkSemaphoreNV\x00"
+		}
+		gpSignalVkSemaphoreNV = (C.GPSIGNALVKSEMAPHORENV)(getProcAddr(name))
+	}
+	{
+		name := "glStartTilingQCOM"
+		if terminated {
+			name = "glStartTilingQCOM\x00"
+		}
+		gpStartTilingQCOM = (C.GPSTARTTILINGQCOM)(getProcAddr(name))
+	}
+	{
+		name := "glStencilFillPathInstancedNV"
+		if terminated {
+			name = "glStencilFillPathInstancedNV\x00"
+		}
+		gpStencilFillPathInstancedNV = (C.GPSTENCILFILLPATHINSTANCEDNV)(getProcAddr(name))
+	}
+	{
+		name := "glStencilFillPathNV"
+		if terminated {
+			name = "glStencilFillPathNV\x00"
+		}
+		gpStencilFillPathNV = (C.GPSTENCILFILLPATHNV)(getProcAddr(name))
+	}
+	{
+		name := "glStencilFunc"
+		if terminated {
+			name = "glStencilFunc\x00"
+		}
+		gpStencilFunc = (C.GPSTENCILFUNC)(getProcAddr(name))
+		if gpStencilFunc == nil && firstMissing == "" {
+			firstMissing = "glStencilFunc"
+		}
+	}
+	{
+		name := "glStencilFuncSeparate"
+		if terminated {
+			name = "glStencilFuncSeparate\x00"
+		}
+		gpStencilFuncSeparate = (C.GPSTENCILFUNCSEPARATE)(getProcAddr(name))
+		if gpStencilFuncSeparate == nil && firstMissing == "" {
+			firstMissing = "glStencilFuncSeparate"
+		}
+	}
+	{
+		name := "glStencilMask"
+		if terminated {
+			name = "glStencilMask\x00"
+		}
+		gpStencilMask = (C.GPSTENCILMASK)(getProcAddr(name))
+		if gpStencilMask == nil && firstMissing == "" {
+			firstMissing = "glStencilMask"
+		}
+	}
+	{
+		name := "glStencilMaskSeparate"
+		if terminated {
+			name = "glStencilMaskSeparate\x00"
+		}
+		gpStencilMaskSeparate = (C.GPSTENCILMASKSEPARATE)(getProcAddr(name))
+		if gpStencilMaskSeparate == nil && firstMissing == "" {
+			firstMissing = "glStencilMaskSeparate"
+		}
+	}
+	{
+		name := "glStencilOp"
+		if terminated {
+			name = "glStencilOp\x00"
+		}
+		gpStencilOp = (C.GPSTENCILOP)(getProcAddr(name))
+		if gpStencilOp == nil && firstMissing == "" {
+			firstMissing = "glStencilOp"
+		}
+	}
+	{
+		name := "glStencilOpSeparate"
+		if terminated {
+			name = "glStencilOpSeparate\x00"
+		}
+		gpStencilOpSeparate = (C.GPSTENCILOPSEPARATE)(getProcAddr(name))
+		if gpStencilOpSeparate == nil && firstMissing == "" {
+			firstMissing = "glStencilOpSeparate"
+		}
+	}
+	{
+		name := "glStencilStrokePathInstancedNV"
+		if terminated {
+			name = "glStencilStrokePathInstancedNV\x00"
+		}
+		gpStencilStrokePathInstancedNV = (C.GPSTENCILSTROKEPATHINSTANCEDNV)(getProcAddr(name))
+	}
+	{
+		name := "glStencilStrokePathNV"
+		if terminated {
+			name = "glStencilStrokePathNV\x00"
+		}
+		gpStencilStrokePathNV = (C.GPSTENCILSTROKEPATHNV)(getProcAddr(name))
+	}
+	{
+		name := "glStencilThenCoverFillPathInstancedNV"
+		if terminated {
+			name = "glStencilThenCoverFillPathInstancedNV\x00"
+		}
+		gpStencilThenCoverFillPathInstancedNV = (C.GPSTENCILTHENCOVERFILLPATHINSTANCEDNV)(getProcAddr(name))
+	}
+	{
+		name := "glStencilThenCoverFillPathNV"
+		if terminated {
+			name = "glStencilThenCoverFillPathNV\x00"
+		}
+		gpStencilThenCoverFillPathNV = (C.GPSTENCILTHENCOVERFILLPATHNV)(getProcAddr(name))
+	}
+	{
+		name := "glStencilThenCoverStrokePathInstancedNV"
+		if terminated {
+			name = "glStencilThenCoverStrokePathInstancedNV\x00"
+		}
+		gpStencilThenCoverStrokePathInstancedNV = (C.GPSTENCILTHENCOVERSTROKEPATHINSTANCEDNV)(getProcAddr(name))
+	}
+	{
+		name := "glStencilThenCoverStrokePathNV"
+		if terminated {
+			name = "glStencilThenCoverStrokePathNV\x00"
+		}
+		gpStencilThenCoverStrokePathNV = (C.GPSTENCILTHENCOVERSTROKEPATHNV)(getProcAddr(name))
+	}
+	{
+		name := "glSubpixelPrecisionBiasNV"
+		if terminated {
+			name = "glSubpixelPrecisionBiasNV\x00"
+		}
+		gpSubpixelPrecisionBiasNV = (C.GPSUBPIXELPRECISIONBIASNV)(getProcAddr(name))
+	}
+	{
+		name := "glTestFenceNV"
+		if terminated {
+			name = "glTestFenceNV\x00"
+		}
+		gpTestFenceNV = (C.GPTESTFENCENV)(getProcAddr(name))
+	}
+	{
+		name := "glTexAttachMemoryNV"
+		if terminated {
+			name = "glTexAttachMemoryNV\x00"
+		}
+		gpTexAttachMemoryNV = (C.GPTEXATTACHMEMORYNV)(getProcAddr(name))
+	}
+	{
+		name := "glTexBuffer"
+		if terminated {
+			name = "glTexBuffer\x00"
+		}
+		gpTexBuffer = (C.GPTEXBUFFER)(getProcAddr(name))
+		if gpTexBuffer == nil && firstMissing == "" {
+			firstMissing = "glTexBuffer"
+		}
+	}
+	{
+		name := "glTexBufferEXT"
+		if terminated {
+			name = "glTexBufferEXT\x00"
+		}
+		gpTexBufferEXT = (C.GPTEXBUFFEREXT)(getProcAddr(name))
+	}
+	{
+		name := "glTexBufferOES"
+		if terminated {
+			name = "glTexBufferOES\x00"
+		}
+		gpTexBufferOES = (C.GPTEXBUFFEROES)(getProcAddr(name))
+	}
+	{
+		name := "glTexBufferRange"
+		if terminated {
+			name = "glTexBufferRange\x00"
+		}
+		gpTexBufferRange = (C.GPTEXBUFFERRANGE)(getProcAddr(name))
+		if gpTexBufferRange == nil && firstMissing == "" {
+			firstMissing = "glTexBufferRange"
+		}
+	}
+	{
+		name := "glTexBufferRangeEXT"
+		if terminated {
+			name = "glTexBufferRangeEXT\x00"
+		}
+		gpTexBufferRangeEXT = (C.GPTEXBUFFERRANGEEXT)(getProcAddr(name))
+	}
+	{
+		name := "glTexBufferRangeOES"
+		if terminated {
+			name = "glTexBufferRangeOES\x00"
+		}
+		gpTexBufferRangeOES = (C.GPTEXBUFFERRANGEOES)(getProcAddr(name))
+	}
+	{
+		name := "glTexEstimateMotionQCOM"
+		if terminated {
+			name = "glTexEstimateMotionQCOM\x00"
+		}
+		gpTexEstimateMotionQCOM = (C.GPTEXESTIMATEMOTIONQCOM)(getProcAddr(name))
+	}
+	{
+		name := "glTexEstimateMotionRegionsQCOM"
+		if terminated {
+			name = "glTexEstimateMotionRegionsQCOM\x00"
+		}
+		gpTexEstimateMotionRegionsQCOM = (C.GPTEXESTIMATEMOTIONREGIONSQCOM)(getProcAddr(name))
+	}
+	{
+		name := "glTexImage2D"
+		if terminated {
+			name = "glTexImage2D\x00"
+		}
+		gpTexImage2D = (C.GPTEXIMAGE2D)(getProcAddr(name))
+		if gpTexImage2D == nil && firstMissing == "" {
+			firstMissing = "glTexImage2D"
+		}
+	}
+	{
+		name := "glTexImage3D"
+		if terminated {
+			name = "glTexImage3D\x00"
+		}
+		gpTexImage3D = (C.GPTEXIMAGE3D)(getProcAddr(name))
+		if gpTexImage3D == nil && firstMissing == "" {
+			firstMissing = "glTexImage3D"
+		}
+	}
+	{
+		name := "glTexImage3DOES"
+		if terminated {
+			name = "glTexImage3DOES\x00"
+		}
+		gpTexImage3DOES = (C.GPTEXIMAGE3DOES)(getProcAddr(name))
+	}
+	{
+		name := "glTexPageCommitmentEXT"
+		if terminated {
+			name = "glTexPageCommitmentEXT\x00"
+		}
+		gpTexPageCommitmentEXT = (C.GPTEXPAGECOMMITMENTEXT)(getProcAddr(name))
+	}
+	{
+		name := "glTexPageCommitmentMemNV"
+		if terminated {
+			name = "glTexPageCommitmentMemNV\x00"
+		}
+		gpTexPageCommitmentMemNV = (C.GPTEXPAGECOMMITMENTMEMNV)(getProcAddr(name))
+	}
+	{
+		name := "glTexParameterIiv"
+		if terminated {
+			name = "glTexParameterIiv\x00"
+		}
+		gpTexParameterIiv = (C.GPTEXPARAMETERIIV)(getProcAddr(name))
+		if gpTexParameterIiv == nil && firstMissing == "" {
+			firstMissing = "glTexParameterIiv"
+		}
+	}
+	{
+		name := "glTexParameterIivEXT"
+		if terminated {
+			name = "glTexParameterIivEXT\x00"
+		}
+		gpTexParameterIivEXT = (C.GPTEXPARAMETERIIVEXT)(getProcAddr(name))
+	}
+	{
+		name := "glTexParameterIivOES"
+		if terminated {
+			name = "glTexParameterIivOES\x00"
+		}
+		gpTexParameterIivOES = (C.GPTEXPARAMETERIIVOES)(getProcAddr(name))
+	}
+	{
+		name := "glTexParameterIuiv"
+		if terminated {
+			name = "glTexParameterIuiv\x00"
+		}
+		gpTexParameterIuiv = (C.GPTEXPARAMETERIUIV)(getProcAddr(name))
+		if gpTexParameterIuiv == nil && firstMissing == "" {
+			firstMissing = "glTexParameterIuiv"
+		}
+	}
+	{
+		name := "glTexParameterIuivEXT"
+		if terminated {
+			name = "glTexParameterIuivEXT\x00"
+		}
+		gpTexParameterIuivEXT = (C.GPTEXPARAMETERIUIVEXT)(getProcAddr(name))
+	}
+	{
+		name := "glTexParameterIuivOES"
+		if terminated {
+			name = "glTexParameterIuivOES\x00"
+		}
+		gpTexParameterIuivOES = (C.GPTEXPARAMETERIUIVOES)(getProcAddr(name))
+	}
+	{
+		name := "glTexParameterf"
+		if terminated {
+			name = "glTexParameterf\x00"
+		}
+		gpTexParameterf = (C.GPTEXPARAMETERF)(getProcAddr(name))
+		if gpTexParameterf == nil && firstMissing == "" {
+			firstMissing = "glTexParameterf"
+		}
+	}
+	{
+		name := "glTexParameterfv"
+		if terminated {
+			name = "glTexParameterfv\x00"
+		}
+		gpTexParameterfv = (C.GPTEXPARAMETERFV)(getProcAddr(name))
+		if gpTexParameterfv == nil && firstMissing == "" {
+			firstMissing = "glTexParameterfv"
+		}
+	}
+	{
+		name := "glTexParameteri"
+		if terminated {
+			name = "glTexParameteri\x00"
+		}
+		gpTexParameteri = (C.GPTEXPARAMETERI)(getProcAddr(name))
+		if gpTexParameteri == nil && firstMissing == "" {
+			firstMissing = "glTexParameteri"
+		}
+	}
+	{
+		name := "glTexParameteriv"
+		if terminated {
+			name = "glTexParameteriv\x00"
+		}
+		gpTexParameteriv = (C.GPTEXPARAMETERIV)(getProcAddr(name))
+		if gpTexParameteriv == nil && firstMissing == "" {
+			firstMissing = "glTexParameteriv"
+		}
+	}
+	{
+		name := "glTexStorage1DEXT"
+		if terminated {
+			name = "glTexStorage1DEXT\x00"
+		}
+		gpTexStorage1DEXT = (C.GPTEXSTORAGE1DEXT)(getProcAddr(name))
+	}
+	{
+		name := "glTexStorage2D"
+		if terminated {
+			name = "glTexStorage2D\x00"
+		}
+		gpTexStorage2D = (C.GPTEXSTORAGE2D)(getProcAddr(name))
+		if gpTexStorage2D == nil && firstMissing == "" {
+			firstMissing = "glTexStorage2D"
+		}
+	}
+	{
+		name := "glTexStorage2DEXT"
+		if terminated {
+			name = "glTexStorage2DEXT\x00"
+		}
+		gpTexStorage2DEXT = (C.GPTEXSTORAGE2DEXT)(getProcAddr(name))
+	}
+	{
+		name := "glTexStorage2DMultisample"
+		if terminated {
+			name = "glTexStorage2DMultisample\x00"
+		}
+		gpTexStorage2DMultisample = (C.GPTEXSTORAGE2DMULTISAMPLE)(getProcAddr(name))
+		if gpTexStorage2DMultisample == nil && firstMissing == "" {
+			firstMissing = "glTexStorage2DMultisample"
+		}
+	}
+	{
+		name := "glTexStorage3D"
+		if terminated {
+			name = "glTexStorage3D\x00"
+		}
+		gpTexStorage3D = (C.GPTEXSTORAGE3D)(getProcAddr(name))
+		if gpTexStorage3D == nil && firstMissing == "" {
+			firstMissing = "glTexStorage3D"
+		}
+	}
+	{
+		name := "glTexStorage3DEXT"
+		if terminated {
+			name = "glTexStorage3DEXT\x00"
+		}
+		gpTexStorage3DEXT = (C.GPTEXSTORAGE3DEXT)(getProcAddr(name))
+	}
+	{
+		name := "glTexStorage3DMultisample"
+		if terminated {
+			name = "glTexStorage3DMultisample\x00"
+		}
+		gpTexStorage3DMultisample = (C.GPTEXSTORAGE3DMULTISAMPLE)(getProcAddr(name))
+		if gpTexStorage3DMultisample == nil && firstMissing == "" {
+			firstMissing = "glTexStorage3DMultisample"
+		}
+	}
+	{
+		name := "glTexStorage3DMultisampleOES"
+		if terminated {
+			name = "glTexStorage3DMultisampleOES\x00"
+		}
+		gpTexStorage3DMultisampleOES = (C.GPTEXSTORAGE3DMULTISAMPLEOES)(getProcAddr(name))
+	}
+	{
+		name := "glTexStorageAttribs2DEXT"
+		if terminated {
+			name = "glTexStorageAttribs2DEXT\x00"
+		}
+		gpTexStorageAttribs2DEXT = (C.GPTEXSTORAGEATTRIBS2DEXT)(getProcAddr(name))
+	}
+	{
+		name := "glTexStorageAttribs3DEXT"
+		if terminated {
+			name = "glTexStorageAttribs3DEXT\x00"
+		}
+		gpTexStorageAttribs3DEXT = (C.GPTEXSTORAGEATTRIBS3DEXT)(getProcAddr(name))
+	}
+	{
+		name := "glTexStorageMem1DEXT"
+		if terminated {
+			name = "glTexStorageMem1DEXT\x00"
+		}
+		gpTexStorageMem1DEXT = (C.GPTEXSTORAGEMEM1DEXT)(getProcAddr(name))
+	}
+	{
+		name := "glTexStorageMem2DEXT"
+		if terminated {
+			name = "glTexStorageMem2DEXT\x00"
+		}
+		gpTexStorageMem2DEXT = (C.GPTEXSTORAGEMEM2DEXT)(getProcAddr(name))
+	}
+	{
+		name := "glTexStorageMem2DMultisampleEXT"
+		if terminated {
+			name = "glTexStorageMem2DMultisampleEXT\x00"
+		}
+		gpTexStorageMem2DMultisampleEXT = (C.GPTEXSTORAGEMEM2DMULTISAMPLEEXT)(getProcAddr(name))
+	}
+	{
+		name := "glTexStorageMem3DEXT"
+		if terminated {
+			name = "glTexStorageMem3DEXT\x00"
+		}
+		gpTexStorageMem3DEXT = (C.GPTEXSTORAGEMEM3DEXT)(getProcAddr(name))
+	}
+	{
+		name := "glTexStorageMem3DMultisampleEXT"
+		if terminated {
+			name = "glTexStorageMem3DMultisampleEXT\x00"
+		}
+		gpTexStorageMem3DMultisampleEXT = (C.GPTEXSTORAGEMEM3DMULTISAMPLEEXT)(getProcAddr(name))
+	}
+	{
+		name := "glTexSubImage2D"
+		if terminated {
+			name = "glTexSubImage2D\x00"
+		}
+		gpTexSubImage2D = (C.GPTEXSUBIMAGE2D)(getProcAddr(name))
+		if gpTexSubImage2D == nil && firstMissing == "" {
+			firstMissing = "glTexSubImage2D"
+		}
+	}
+	{
+		name := "glTexSubImage3D"
+		if terminated {
+			name = "glTexSubImage3D\x00"
+		}
+		gpTexSubImage3D = (C.GPTEXSUBIMAGE3D)(getProcAddr(name))
+		if gpTexSubImage3D == nil && firstMissing == "" {
+			firstMissing = "glTexSubImage3D"
+		}
+	}
+	{
+		name := "glTexSubImage3DOES"
+		if terminated {
+			name = "glTexSubImage3DOES\x00"
+		}
+		gpTexSubImage3DOES = (C.GPTEXSUBIMAGE3DOES)(getProcAddr(name))
+	}
+	{
+		name := "glTextureAttachMemoryNV"
+		if terminated {
+			name = "glTextureAttachMemoryNV\x00"
+		}
+		gpTextureAttachMemoryNV = (C.GPTEXTUREATTACHMEMORYNV)(getProcAddr(name))
+	}
+	{
+		name := "glTextureBarrierNV"
+		if terminated {
+			name = "glTextureBarrierNV\x00"
+		}
+		gpTextureBarrierNV = (C.GPTEXTUREBARRIERNV)(getProcAddr(name))
+	}
+	{
+		name := "glTextureFoveationParametersQCOM"
+		if terminated {
+			name = "glTextureFoveationParametersQCOM\x00"
+		}
+		gpTextureFoveationParametersQCOM = (C.GPTEXTUREFOVEATIONPARAMETERSQCOM)(getProcAddr(name))
+	}
+	{
+		name := "glTexturePageCommitmentMemNV"
+		if terminated {
+			name = "glTexturePageCommitmentMemNV\x00"
+		}
+		gpTexturePageCommitmentMemNV = (C.GPTEXTUREPAGECOMMITMENTMEMNV)(getProcAddr(name))
+	}
+	{
+		name := "glTextureStorage1DEXT"
+		if terminated {
+			name = "glTextureStorage1DEXT\x00"
+		}
+		gpTextureStorage1DEXT = (C.GPTEXTURESTORAGE1DEXT)(getProcAddr(name))
+	}
+	{
+		name := "glTextureStorage2DEXT"
+		if terminated {
+			name = "glTextureStorage2DEXT\x00"
+		}
+		gpTextureStorage2DEXT = (C.GPTEXTURESTORAGE2DEXT)(getProcAddr(name))
+	}
+	{
+		name := "glTextureStorage3DEXT"
+		if terminated {
+			name = "glTextureStorage3DEXT\x00"
+		}
+		gpTextureStorage3DEXT = (C.GPTEXTURESTORAGE3DEXT)(getProcAddr(name))
+	}
+	{
+		name := "glTextureStorageMem1DEXT"
+		if terminated {
+			name = "glTextureStorageMem1DEXT\x00"
+		}
+		gpTextureStorageMem1DEXT = (C.GPTEXTURESTORAGEMEM1DEXT)(getProcAddr(name))
+	}
+	{
+		name := "glTextureStorageMem2DEXT"
+		if terminated {
+			name = "glTextureStorageMem2DEXT\x00"
+		}
+		gpTextureStorageMem2DEXT = (C.GPTEXTURESTORAGEMEM2DEXT)(getProcAddr(name))
+	}
+	{
+		name := "glTextureStorageMem2DMultisampleEXT"
+		if terminated {
+			name = "glTextureStorageMem2DMultisampleEXT\x00"
+		}
+		gpTextureStorageMem2DMultisampleEXT = (C.GPTEXTURESTORAGEMEM2DMULTISAMPLEEXT)(getProcAddr(name))
+	}
+	{
+		name := "glTextureStorageMem3DEXT"
+		if terminated {
+			name = "glTextureStorageMem3DEXT\x00"
+		}
+		gpTextureStorageMem3DEXT = (C.GPTEXTURESTORAGEMEM3DEXT)(getProcAddr(name))
+	}
+	{
+		name := "glTextureStorageMem3DMultisampleEXT"
+		if terminated {
+			name = "glTextureStorageMem3DMultisampleEXT\x00"
+		}
+		gpTextureStorageMem3DMultisampleEXT = (C.GPTEXTURESTORAGEMEM3DMULTISAMPLEEXT)(getProcAddr(name))
+	}
+	{
+		name := "glTextureViewEXT"
+		if terminated {
+			name = "glTextureViewEXT\x00"
+		}
+		gpTextureViewEXT = (C.GPTEXTUREVIEWEXT)(getProcAddr(name))
+	}
+	{
+		name := "glTextureViewOES"
+		if terminated {
+			name = "glTextureViewOES\x00"
+		}
+		gpTextureViewOES = (C.GPTEXTUREVIEWOES)(getProcAddr(name))
+	}
+	{
+		name := "glTransformFeedbackVaryings"
+		if terminated {
+			name = "glTransformFeedbackVaryings\x00"
+		}
+		gpTransformFeedbackVaryings = (C.GPTRANSFORMFEEDBACKVARYINGS)(getProcAddr(name))
+		if gpTransformFeedbackVaryings == nil && firstMissing == "" {
+			firstMissing = "glTransformFeedbackVaryings"
+		}
+	}
+	{
+		name := "glTransformPathNV"
+		if terminated {
+			name = "glTransformPathNV\x00"
+		}
+		gpTransformPathNV = (C.GPTRANSFORMPATHNV)(getProcAddr(name))
+	}
+	{
+		name := "glUniform1f"
+		if terminated {
+			name = "glUniform1f\x00"
+		}
+		gpUniform1f = (C.GPUNIFORM1F)(getProcAddr(name))
+		if gpUniform1f == nil && firstMissing == "" {
+			firstMissing = "glUniform1f"
+		}
+	}
+	{
+		name := "glUniform1fv"
+		if terminated {
+			name = "glUniform1fv\x00"
+		}
+		gpUniform1fv = (C.GPUNIFORM1FV)(getProcAddr(name))
+		if gpUniform1fv == nil && firstMissing == "" {
+			firstMissing = "glUniform1fv"
+		}
+	}
+	{
+		name := "glUniform1i"
+		if terminated {
+			name = "glUniform1i\x00"
+		}
+		gpUniform1i = (C.GPUNIFORM1I)(getProcAddr(name))
+		if gpUniform1i == nil && firstMissing == "" {
+			firstMissing = "glUniform1i"
+		}
+	}
+	{
+		name := "glUniform1i64NV"
+		if terminated {
+			name = "glUniform1i64NV\x00"
+		}
+		gpUniform1i64NV = (C.GPUNIFORM1I64NV)(getProcAddr(name))
+	}
+	{
+		name := "glUniform1i64vNV"
+		if terminated {
+			name = "glUniform1i64vNV\x00"
+		}
+		gpUniform1i64vNV = (C.GPUNIFORM1I64VNV)(getProcAddr(name))
+	}
+	{
+		name := "glUniform1iv"
+		if terminated {
+			name = "glUniform1iv\x00"
+		}
+		gpUniform1iv = (C.GPUNIFORM1IV)(getProcAddr(name))
+		if gpUniform1iv == nil && firstMissing == "" {
+			firstMissing = "glUniform1iv"
+		}
+	}
+	{
+		name := "glUniform1ui"
+		if terminated {
+			name = "glUniform1ui\x00"
+		}
+		gpUniform1ui = (C.GPUNIFORM1UI)(getProcAddr(name))
+		if gpUniform1ui == nil && firstMissing == "" {
+			firstMissing = "glUniform1ui"
+		}
+	}
+	{
+		name := "glUniform1ui64NV"
+		if terminated {
+			name = "glUniform1ui64NV\x00"
+		}
+		gpUniform1ui64NV = (C.GPUNIFORM1UI64NV)(getProcAddr(name))
+	}
+	{
+		name := "glUniform1ui64vNV"
+		if terminated {
+			name = "glUniform1ui64vNV\x00"
+		}
+		gpUniform1ui64vNV = (C.GPUNIFORM1UI64VNV)(getProcAddr(name))
+	}
+	{
+		name := "glUniform1uiv"
+		if terminated {
+			name = "glUniform1uiv\x00"
+		}
+		gpUniform1uiv = (C.GPUNIFORM1UIV)(getProcAddr(name))
+		if gpUniform1uiv == nil && firstMissing == "" {
+			firstMissing = "glUniform1uiv"
+		}
+	}
+	{
+		name := "glUniform2f"
+		if terminated {
+			name = "glUniform2f\x00"
+		}
+		gpUniform2f = (C.GPUNIFORM2F)(getProcAddr(name))
+		if gpUniform2f == nil && firstMissing == "" {
+			firstMissing = "glUniform2f"
+		}
+	}
+	{
+		name := "glUniform2fv"
+		if terminated {
+			name = "glUniform2fv\x00"
+		}
+		gpUniform2fv = (C.GPUNIFORM2FV)(getProcAddr(name))
+		if gpUniform2fv == nil && firstMissing == "" {
+			firstMissing = "glUniform2fv"
+		}
+	}
+	{
+		name := "glUniform2i"
+		if terminated {
+			name = "glUniform2i\x00"
+		}
+		gpUniform2i = (C.GPUNIFORM2I)(getProcAddr(name))
+		if gpUniform2i == nil && firstMissing == "" {
+			firstMissing = "glUniform2i"
+		}
+	}
+	{
+		name := "glUniform2i64NV"
+		if terminated {
+			name = "glUniform2i64NV\x00"
+		}
+		gpUniform2i64NV = (C.GPUNIFORM2I64NV)(getProcAddr(name))
+	}
+	{
+		name := "glUniform2i64vNV"
+		if terminated {
+			name = "glUniform2i64vNV\x00"
+		}
+		gpUniform2i64vNV = (C.GPUNIFORM2I64VNV)(getProcAddr(name))
+	}
+	{
+		name := "glUniform2iv"
+		if terminated {
+			name = "glUniform2iv\x00"
+		}
+		gpUniform2iv = (C.GPUNIFORM2IV)(getProcAddr(name))
+		if gpUniform2iv == nil && firstMissing == "" {
+			firstMissing = "glUniform2iv"
+		}
+	}
+	{
+		name := "glUniform2ui"
+		if terminated {
+			name = "glUniform2ui\x00"
+		}
+		gpUniform2ui = (C.GPUNIFORM2UI)(getProcAddr(name))
+		if gpUniform2ui == nil && firstMissing == "" {
+			firstMissing = "glUniform2ui"
+		}
+	}
+	{
+		name := "glUniform2ui64NV"
+		if terminated {
+			name = "glUniform2ui64NV\x00"
+		}
+		gpUniform2ui64NV = (C.GPUNIFORM2UI64NV)(getProcAddr(name))
+	}
+	{
+		name := "glUniform2ui64vNV"
+		if terminated {
+			name = "glUniform2ui64vNV\x00"
+		}
+		gpUniform2ui64vNV = (C.GPUNIFORM2UI64VNV)(getProcAddr(name))
+	}
+	{
+		name := "glUniform2uiv"
+		if terminated {
+			name = "glUniform2uiv\x00"
+		}
+		gpUniform2uiv = (C.GPUNIFORM2UIV)(getProcAddr(name))
+		if gpUniform2uiv == nil && firstMissing == "" {
+			firstMissing = "glUniform2uiv"
+		}
+	}
+	{
+		name := "glUniform3f"
+		if terminated {
+			name = "glUniform3f\x00"
+		}
+		gpUniform3f = (C.GPUNIFORM3F)(getProcAddr(name))
+		if gpUniform3f == nil && firstMissing == "" {
+			firstMissing = "glUniform3f"
+		}
+	}
+	{
+		name := "glUniform3fv"
+		if terminated {
+			name = "glUniform3fv\x00"
+		}
+		gpUniform3fv = (C.GPUNIFORM3FV)(getProcAddr(name))
+		if gpUniform3fv == nil && firstMissing == "" {
+			firstMissing = "glUniform3fv"
+		}
+	}
+	{
+		name := "glUniform3i"
+		if terminated {
+			name = "glUniform3i\x00"
+		}
+		gpUniform3i = (C.GPUNIFORM3I)(getProcAddr(name))
+		if gpUniform3i == nil && firstMissing == "" {
+			firstMissing = "glUniform3i"
+		}
+	}
+	{
+		name := "glUniform3i64NV"
+		if terminated {
+			name = "glUniform3i64NV\x00"
+		}
+		gpUniform3i64NV = (C.GPUNIFORM3I64NV)(getProcAddr(name))
+	}
+	{
+		name := "glUniform3i64vNV"
+		if terminated {
+			name = "glUniform3i64vNV\x00"
+		}
+		gpUniform3i64vNV = (C.GPUNIFORM3I64VNV)(getProcAddr(name))
+	}
+	{
+		name := "glUniform3iv"
+		if terminated {
+			name = "glUniform3iv\x00"
+		}
+		gpUniform3iv = (C.GPUNIFORM3IV)(getProcAddr(name))
+		if gpUniform3iv == nil && firstMissing == "" {
+			firstMissing = "glUniform3iv"
+		}
+	}
+	{
+		name := "glUniform3ui"
+		if terminated {
+			name = "glUniform3ui\x00"
+		}
+		gpUniform3ui = (C.GPUNIFORM3UI)(getProcAddr(name))
+		if gpUniform3ui == nil && firstMissing == "" {
+			firstMissing = "glUniform3ui"
+		}
+	}
+	{
+		name := "glUniform3ui64NV"
+		if terminated {
+			name = "glUniform3ui64NV\x00"
+		}
+		gpUniform3ui64NV = (C.GPUNIFORM3UI64NV)(getProcAddr(name))
+	}
+	{
+		name := "glUniform3ui64vNV"
+		if terminated {
+			name = "glUniform3ui64vNV\x00"
+		}
+		gpUniform3ui64vNV = (C.GPUNIFORM3UI64VNV)(getProcAddr(name))
+	}
+	{
+		name := "glUniform3uiv"
+		if terminated {
+			name = "glUniform3uiv\x00"
+		}
+		gpUniform3uiv = (C.GPUNIFORM3UIV)(getProcAddr(name))
+		if gpUniform3uiv == nil && firstMissing == "" {
+			firstMissing = "glUniform3uiv"
+		}
+	}
+	{
+		name := "glUniform4f"
+		if terminated {
+			name = "glUniform4f\x00"
+		}
+		gpUniform4f = (C.GPUNIFORM4F)(getProcAddr(name))
+		if gpUniform4f == nil && firstMissing == "" {
+			firstMissing = "glUniform4f"
+		}
+	}
+	{
+		name := "glUniform4fv"
+		if terminated {
+			name = "glUniform4fv\x00"
+		}
+		gpUniform4fv = (C.GPUNIFORM4FV)(getProcAddr(name))
+		if gpUniform4fv == nil && firstMissing == "" {
+			firstMissing = "glUniform4fv"
+		}
+	}
+	{
+		name := "glUniform4i"
+		if terminated {
+			name = "glUniform4i\x00"
+		}
+		gpUniform4i = (C.GPUNIFORM4I)(getProcAddr(name))
+		if gpUniform4i == nil && firstMissing == "" {
+			firstMissing = "glUniform4i"
+		}
+	}
+	{
+		name := "glUniform4i64NV"
+		if terminated {
+			name = "glUniform4i64NV\x00"
+		}
+		gpUniform4i64NV = (C.GPUNIFORM4I64NV)(getProcAddr(name))
+	}
+	{
+		name := "glUniform4i64vNV"
+		if terminated {
+			name = "glUniform4i64vNV\x00"
+		}
+		gpUniform4i64vNV = (C.GPUNIFORM4I64VNV)(getProcAddr(name))
+	}
+	{
+		name := "glUniform4iv"
+		if terminated {
+			name = "glUniform4iv\x00"
+		}
+		gpUniform4iv = (C.GPUNIFORM4IV)(getProcAddr(name))
+		if gpUniform4iv == nil && firstMissing == "" {
+			firstMissing = "glUniform4iv"
+		}
+	}
+	{
+		name := "glUniform4ui"
+		if terminated {
+			name = "glUniform4ui\x00"
+		}
+		gpUniform4ui = (C.GPUNIFORM4UI)(getProcAddr(name))
+		if gpUniform4ui == nil && firstMissing == "" {
+			firstMissing = "glUniform4ui"
+		}
+	}
+	{
+		name := "glUniform4ui64NV"
+		if terminated {
+			name = "glUniform4ui64NV\x00"
+		}
+		gpUniform4ui64NV = (C.GPUNIFORM4UI64NV)(getProcAddr(name))
+	}
+	{
+		name := "glUniform4ui64vNV"
+		if terminated {
+			name = "glUniform4ui64vNV\x00"
+		}
+		gpUniform4ui64vNV = (C.GPUNIFORM4UI64VNV)(getProcAddr(name))
+	}
+	{
+		name := "glUniform4uiv"
+		if terminated {
+			name = "glUniform4uiv\x00"
+		}
+		gpUniform4uiv = (C.GPUNIFORM4UIV)(getProcAddr(name))
+		if gpUniform4uiv == nil && firstMissing == "" {
+			firstMissing = "glUniform4uiv"
+		}
+	}
+	{
+		name := "glUniformBlockBinding"
+		if terminated {
+			name = "glUniformBlockBinding\x00"
+		}
+		gpUniformBlockBinding = (C.GPUNIFORMBLOCKBINDING)(getProcAddr(name))
+		if gpUniformBlockBinding == nil && firstMissing == "" {
+			firstMissing = "glUniformBlockBinding"
+		}
+	}
+	{
+		name := "glUniformHandleui64IMG"
+		if terminated {
+			name = "glUniformHandleui64IMG\x00"
+		}
+		gpUniformHandleui64IMG = (C.GPUNIFORMHANDLEUI64IMG)(getProcAddr(name))
+	}
+	{
+		name := "glUniformHandleui64NV"
+		if terminated {
+			name = "glUniformHandleui64NV\x00"
+		}
+		gpUniformHandleui64NV = (C.GPUNIFORMHANDLEUI64NV)(getProcAddr(name))
+	}
+	{
+		name := "glUniformHandleui64vIMG"
+		if terminated {
+			name = "glUniformHandleui64vIMG\x00"
+		}
+		gpUniformHandleui64vIMG = (C.GPUNIFORMHANDLEUI64VIMG)(getProcAddr(name))
+	}
+	{
+		name := "glUniformHandleui64vNV"
+		if terminated {
+			name = "glUniformHandleui64vNV\x00"
+		}
+		gpUniformHandleui64vNV = (C.GPUNIFORMHANDLEUI64VNV)(getProcAddr(name))
+	}
+	{
+		name := "glUniformMatrix2fv"
+		if terminated {
+			name = "glUniformMatrix2fv\x00"
+		}
+		gpUniformMatrix2fv = (C.GPUNIFORMMATRIX2FV)(getProcAddr(name))
+		if gpUniformMatrix2fv == nil && firstMissing == "" {
+			firstMissing = "glUniformMatrix2fv"
+		}
+	}
+	{
+		name := "glUniformMatrix2x3fv"
+		if terminated {
+			name = "glUniformMatrix2x3fv\x00"
+		}
+		gpUniformMatrix2x3fv = (C.GPUNIFORMMATRIX2X3FV)(getProcAddr(name))
+		if gpUniformMatrix2x3fv == nil && firstMissing == "" {
+			firstMissing = "glUniformMatrix2x3fv"
+		}
+	}
+	{
+		name := "glUniformMatrix2x3fvNV"
+		if terminated {
+			name = "glUniformMatrix2x3fvNV\x00"
+		}
+		gpUniformMatrix2x3fvNV = (C.GPUNIFORMMATRIX2X3FVNV)(getProcAddr(name))
+	}
+	{
+		name := "glUniformMatrix2x4fv"
+		if terminated {
+			name = "glUniformMatrix2x4fv\x00"
+		}
+		gpUniformMatrix2x4fv = (C.GPUNIFORMMATRIX2X4FV)(getProcAddr(name))
+		if gpUniformMatrix2x4fv == nil && firstMissing == "" {
+			firstMissing = "glUniformMatrix2x4fv"
+		}
+	}
+	{
+		name := "glUniformMatrix2x4fvNV"
+		if terminated {
+			name = "glUniformMatrix2x4fvNV\x00"
+		}
+		gpUniformMatrix2x4fvNV = (C.GPUNIFORMMATRIX2X4FVNV)(getProcAddr(name))
+	}
+	{
+		name := "glUniformMatrix3fv"
+		if terminated {
+			name = "glUniformMatrix3fv\x00"
+		}
+		gpUniformMatrix3fv = (C.GPUNIFORMMATRIX3FV)(getProcAddr(name))
+		if gpUniformMatrix3fv == nil && firstMissing == "" {
+			firstMissing = "glUniformMatrix3fv"
+		}
+	}
+	{
+		name := "glUniformMatrix3x2fv"
+		if terminated {
+			name = "glUniformMatrix3x2fv\x00"
+		}
+		gpUniformMatrix3x2fv = (C.GPUNIFORMMATRIX3X2FV)(getProcAddr(name))
+		if gpUniformMatrix3x2fv == nil && firstMissing == "" {
+			firstMissing = "glUniformMatrix3x2fv"
+		}
+	}
+	{
+		name := "glUniformMatrix3x2fvNV"
+		if terminated {
+			name = "glUniformMatrix3x2fvNV\x00"
+		}
+		gpUniformMatrix3x2fvNV = (C.GPUNIFORMMATRIX3X2FVNV)(getProcAddr(name))
+	}
+	{
+		name := "glUniformMatrix3x4fv"
+		if terminated {
+			name = "glUniformMatrix3x4fv\x00"
+		}
+		gpUniformMatrix3x4fv = (C.GPUNIFORMMATRIX3X4FV)(getProcAddr(name))
+		if gpUniformMatrix3x4fv == nil && firstMissing == "" {
+			firstMissing = "glUniformMatrix3x4fv"
+		}
+	}
+	{
+		name := "glUniformMatrix3x4fvNV"
+		if terminated {
+			name = "glUniformMatrix3x4fvNV\x00"
+		}
+		gpUniformMatrix3x4fvNV = (C.GPUNIFORMMATRIX3X4FVNV)(getProcAddr(name))
+	}
+	{
+		name := "glUniformMatrix4fv"
+		if terminated {
+			name = "glUniformMatrix4fv\x00"
+		}
+		gpUniformMatrix4fv = (C.GPUNIFORMMATRIX4FV)(getProcAddr(name))
+		if gpUniformMatrix4fv == nil && firstMissing == "" {
+			firstMissing = "glUniformMatrix4fv"
+		}
+	}
+	{
+		name := "glUniformMatrix4x2fv"
+		if terminated {
+			name = "glUniformMatrix4x2fv\x00"
+		}
+		gpUniformMatrix4x2fv = (C.GPUNIFORMMATRIX4X2FV)(getProcAddr(name))
+		if gpUniformMatrix4x2fv == nil && firstMissing == "" {
+			firstMissing = "glUniformMatrix4x2fv"
+		}
+	}
+	{
+		name := "glUniformMatrix4x2fvNV"
+		if terminated {
+			name = "glUniformMatrix4x2fvNV\x00"
+		}
+		gpUniformMatrix4x2fvNV = (C.GPUNIFORMMATRIX4X2FVNV)(getProcAddr(name))
+	}
+	{
+		name := "glUniformMatrix4x3fv"
+		if terminated {
+			name = "glUniformMatrix4x3fv\x00"
+		}
+		gpUniformMatrix4x3fv = (C.GPUNIFORMMATRIX4X3FV)(getProcAddr(name))
+		if gpUniformMatrix4x3fv == nil && firstMissing == "" {
+			firstMissing = "glUniformMatrix4x3fv"
+		}
+	}
+	{
+		name := "glUniformMatrix4x3fvNV"
+		if terminated {
+			name = "glUniformMatrix4x3fvNV\x00"
+		}
+		gpUniformMatrix4x3fvNV = (C.GPUNIFORMMATRIX4X3FVNV)(getProcAddr(name))
+	}
+	{
+		name := "glUnmapBuffer"
+		if terminated {
+			name = "glUnmapBuffer\x00"
+		}
+		gpUnmapBuffer = (C.GPUNMAPBUFFER)(getProcAddr(name))
+		if gpUnmapBuffer == nil && firstMissing == "" {
+			firstMissing = "glUnmapBuffer"
+		}
+	}
+	{
+		name := "glUnmapBufferOES"
+		if terminated {
+			name = "glUnmapBufferOES\x00"
+		}
+		gpUnmapBufferOES = (C.GPUNMAPBUFFEROES)(getProcAddr(name))
+	}
+	{
+		name := "glUseProgram"
+		if terminated {
+			name = "glUseProgram\x00"
+		}
+		gpUseProgram = (C.GPUSEPROGRAM)(getProcAddr(name))
+		if gpUseProgram == nil && firstMissing == "" {
+			firstMissing = "glUseProgram"
+		}
+	}
+	{
+		name := "glUseProgramStages"
+		if terminated {
+			name = "glUseProgramStages\x00"
+		}
+		gpUseProgramStages = (C.GPUSEPROGRAMSTAGES)(getProcAddr(name))
+		if gpUseProgramStages == nil && firstMissing == "" {
+			firstMissing = "glUseProgramStages"
+		}
+	}
+	{
+		name := "glUseProgramStagesEXT"
+		if terminated {
+			name = "glUseProgramStagesEXT\x00"
+		}
+		gpUseProgramStagesEXT = (C.GPUSEPROGRAMSTAGESEXT)(getProcAddr(name))
+	}
+	{
+		name := "glUseShaderProgramEXT"
+		if terminated {
+			name = "glUseShaderProgramEXT\x00"
+		}
+		gpUseShaderProgramEXT = (C.GPUSESHADERPROGRAMEXT)(getProcAddr(name))
+	}
+	{
+		name := "glValidateProgram"
+		if terminated {
+			name = "glValidateProgram\x00"
+		}
+		gpValidateProgram = (C.GPVALIDATEPROGRAM)(getProcAddr(name))
+		if gpValidateProgram == nil && firstMissing == "" {
+			firstMissing = "glValidateProgram"
+		}
+	}
+	{
+		name := "glValidateProgramPipeline"
+		if terminated {
+			name = "glValidateProgramPipeline\x00"
+		}
+		gpValidateProgramPipeline = (C.GPVALIDATEPROGRAMPIPELINE)(getProcAddr(name))
+		if gpValidateProgramPipeline == nil && firstMissing == "" {
+			firstMissing = "glValidateProgramPipeline"
+		}
+	}
+	{
+		name := "glValidateProgramPipelineEXT"
+		if terminated {
+			name = "glValidateProgramPipelineEXT\x00"
+		}
+		gpValidateProgramPipelineEXT = (C.GPVALIDATEPROGRAMPIPELINEEXT)(getProcAddr(name))
+	}
+	{
+		name := "glVertexAttrib1f"
+		if terminated {
+			name = "glVertexAttrib1f\x00"
+		}
+		gpVertexAttrib1f = (C.GPVERTEXATTRIB1F)(getProcAddr(name))
+		if gpVertexAttrib1f == nil && firstMissing == "" {
+			firstMissing = "glVertexAttrib1f"
+		}
+	}
+	{
+		name := "glVertexAttrib1fv"
+		if terminated {
+			name = "glVertexAttrib1fv\x00"
+		}
+		gpVertexAttrib1fv = (C.GPVERTEXATTRIB1FV)(getProcAddr(name))
+		if gpVertexAttrib1fv == nil && firstMissing == "" {
+			firstMissing = "glVertexAttrib1fv"
+		}
+	}
+	{
+		name := "glVertexAttrib2f"
+		if terminated {
+			name = "glVertexAttrib2f\x00"
+		}
+		gpVertexAttrib2f = (C.GPVERTEXATTRIB2F)(getProcAddr(name))
+		if gpVertexAttrib2f == nil && firstMissing == "" {
+			firstMissing = "glVertexAttrib2f"
+		}
+	}
+	{
+		name := "glVertexAttrib2fv"
+		if terminated {
+			name = "glVertexAttrib2fv\x00"
+		}
+		gpVertexAttrib2fv = (C.GPVERTEXATTRIB2FV)(getProcAddr(name))
+		if gpVertexAttrib2fv == nil && firstMissing == "" {
+			firstMissing = "glVertexAttrib2fv"
+		}
+	}
+	{
+		name := "glVertexAttrib3f"
+		if terminated {
+			name = "glVertexAttrib3f\x00"
+		}
+		gpVertexAttrib3f = (C.GPVERTEXATTRIB3F)(getProcAddr(name))
+		if gpVertexAttrib3f == nil && firstMissing == "" {
+			firstMissing = "glVertexAttrib3f"
+		}
+	}
+	{
+		name := "glVertexAttrib3fv"
+		if terminated {
+			name = "glVertexAttrib3fv\x00"
+		}
+		gpVertexAttrib3fv = (C.GPVERTEXATTRIB3FV)(getProcAddr(name))
+		if gpVertexAttrib3fv == nil && firstMissing == "" {
+			firstMissing = "glVertexAttrib3fv"
+		}
+	}
+	{
+		name := "glVertexAttrib4f"
+		if terminated {
+			name = "glVertexAttrib4f\x00"
+		}
+		gpVertexAttrib4f = (C.GPVERTEXATTRIB4F)(getProcAddr(name))
+		if gpVertexAttrib4f == nil && firstMissing == "" {
+			firstMissing = "glVertexAttrib4f"
+		}
+	}
+	{
+		name := "glVertexAttrib4fv"
+		if terminated {
+			name = "glVertexAttrib4fv\x00"
+		}
+		gpVertexAttrib4fv = (C.GPVERTEXATTRIB4FV)(getProcAddr(name))
+		if gpVertexAttrib4fv == nil && firstMissing == "" {
+			firstMissing = "glVertexAttrib4fv"
+		}
+	}
+	{
+		name := "glVertexAttribBinding"
+		if terminated {
+			name = "glVertexAttribBinding\x00"
+		}
+		gpVertexAttribBinding = (C.GPVERTEXATTRIBBINDING)(getProcAddr(name))
+		if gpVertexAttribBinding == nil && firstMissing == "" {
+			firstMissing = "glVertexAttribBinding"
+		}
+	}
+	{
+		name := "glVertexAttribDivisor"
+		if terminated {
+			name = "glVertexAttribDivisor\x00"
+		}
+		gpVertexAttribDivisor = (C.GPVERTEXATTRIBDIVISOR)(getProcAddr(name))
+		if gpVertexAttribDivisor == nil && firstMissing == "" {
+			firstMissing = "glVertexAttribDivisor"
+		}
+	}
+	{
+		name := "glVertexAttribDivisorANGLE"
+		if terminated {
+			name = "glVertexAttribDivisorANGLE\x00"
+		}
+		gpVertexAttribDivisorANGLE = (C.GPVERTEXATTRIBDIVISORANGLE)(getProcAddr(name))
+	}
+	{
+		name := "glVertexAttribDivisorEXT"
+		if terminated {
+			name = "glVertexAttribDivisorEXT\x00"
+		}
+		gpVertexAttribDivisorEXT = (C.GPVERTEXATTRIBDIVISOREXT)(getProcAddr(name))
+	}
+	{
+		name := "glVertexAttribDivisorNV"
+		if terminated {
+			name = "glVertexAttribDivisorNV\x00"
+		}
+		gpVertexAttribDivisorNV = (C.GPVERTEXATTRIBDIVISORNV)(getProcAddr(name))
+	}
+	{
+		name := "glVertexAttribFormat"
+		if terminated {
+			name = "glVertexAttribFormat\x00"
+		}
+		gpVertexAttribFormat = (C.GPVERTEXATTRIBFORMAT)(getProcAddr(name))
+		if gpVertexAttribFormat == nil && firstMissing == "" {
+			firstMissing = "glVertexAttribFormat"
+		}
+	}
+	{
+		name := "glVertexAttribI4i"
+		if terminated {
+			name = "glVertexAttribI4i\x00"
+		}
+		gpVertexAttribI4i = (C.GPVERTEXATTRIBI4I)(getProcAddr(name))
+		if gpVertexAttribI4i == nil && firstMissing == "" {
+			firstMissing = "glVertexAttribI4i"
+		}
+	}
+	{
+		name := "glVertexAttribI4iv"
+		if terminated {
+			name = "glVertexAttribI4iv\x00"
+		}
+		gpVertexAttribI4iv = (C.GPVERTEXATTRIBI4IV)(getProcAddr(name))
+		if gpVertexAttribI4iv == nil && firstMissing == "" {
+			firstMissing = "glVertexAttribI4iv"
+		}
+	}
+	{
+		name := "glVertexAttribI4ui"
+		if terminated {
+			name = "glVertexAttribI4ui\x00"
+		}
+		gpVertexAttribI4ui = (C.GPVERTEXATTRIBI4UI)(getProcAddr(name))
+		if gpVertexAttribI4ui == nil && firstMissing == "" {
+			firstMissing = "glVertexAttribI4ui"
+		}
+	}
+	{
+		name := "glVertexAttribI4uiv"
+		if terminated {
+			name = "glVertexAttribI4uiv\x00"
+		}
+		gpVertexAttribI4uiv = (C.GPVERTEXATTRIBI4UIV)(getProcAddr(name))
+		if gpVertexAttribI4uiv == nil && firstMissing == "" {
+			firstMissing = "glVertexAttribI4uiv"
+		}
+	}
+	{
+		name := "glVertexAttribIFormat"
+		if terminated {
+			name = "glVertexAttribIFormat\x00"
+		}
+		gpVertexAttribIFormat = (C.GPVERTEXATTRIBIFORMAT)(getProcAddr(name))
+		if gpVertexAttribIFormat == nil && firstMissing == "" {
+			firstMissing = "glVertexAttribIFormat"
+		}
+	}
+	{
+		name := "glVertexAttribIPointer"
+		if terminated {
+			name = "glVertexAttribIPointer\x00"
+		}
+		gpVertexAttribIPointer = (C.GPVERTEXATTRIBIPOINTER)(getProcAddr(name))
+		if gpVertexAttribIPointer == nil && firstMissing == "" {
+			firstMissing = "glVertexAttribIPointer"
+		}
+	}
+	{
+		name := "glVertexAttribPointer"
+		if terminated {
+			name = "glVertexAttribPointer\x00"
+		}
+		gpVertexAttribPointer = (C.GPVERTEXATTRIBPOINTER)(getProcAddr(name))
+		if gpVertexAttribPointer == nil && firstMissing == "" {
+			firstMissing = "glVertexAttribPointer"
+		}
+	}
+	{
+		name := "glVertexBindingDivisor"
+		if terminated {
+			name = "glVertexBindingDivisor\x00"
+		}
+		gpVertexBindingDivisor = (C.GPVERTEXBINDINGDIVISOR)(getProcAddr(name))
+		if gpVertexBindingDivisor == nil && firstMissing == "" {
+			firstMissing = "glVertexBindingDivisor"
+		}
+	}
+	{
+		name := "glViewport"
+		if terminated {
+			name = "glViewport\x00"
+		}
+		gpViewport = (C.GPVIEWPORT)(getProcAddr(name))
+		if gpViewport == nil && firstMissing == "" {
+			firstMissing = "glViewport"
+		}
+	}
+	{
+		name := "glViewportArrayvNV"
+		if terminated {
+			name = "glViewportArrayvNV\x00"
+		}
+		gpViewportArrayvNV = (C.GPVIEWPORTARRAYVNV)(getProcAddr(name))
+	}
+	{
+		name := "glViewportArrayvOES"
+		if terminated {
+			name = "glViewportArrayvOES\x00"
+		}
+		gpViewportArrayvOES = (C.GPVIEWPORTARRAYVOES)(getProcAddr(name))
+	}
+	{
+		name := "glViewportIndexedfNV"
+		if terminated {
+			name = "glViewportIndexedfNV\x00"
+		}
+		gpViewportIndexedfNV = (C.GPVIEWPORTINDEXEDFNV)(getProcAddr(name))
+	}
+	{
+		name := "glViewportIndexedfOES"
+		if terminated {
+			name = "glViewportIndexedfOES\x00"
+		}
+		gpViewportIndexedfOES = (C.GPVIEWPORTINDEXEDFOES)(getProcAddr(name))
+	}
+	{
+		name := "glViewportIndexedfvNV"
+		if terminated {
+			name = "glViewportIndexedfvNV\x00"
+		}
+		gpViewportIndexedfvNV = (C.GPVIEWPORTINDEXEDFVNV)(getProcAddr(name))
+	}
+	{
+		name := "glViewportIndexedfvOES"
+		if terminated {
+			name = "glViewportIndexedfvOES\x00"
+		}
+		gpViewportIndexedfvOES = (C.GPVIEWPORTINDEXEDFVOES)(getProcAddr(name))
+	}
+	{
+		name := "glViewportPositionWScaleNV"
+		if terminated {
+			name = "glViewportPositionWScaleNV\x00"
+		}
+		gpViewportPositionWScaleNV = (C.GPVIEWPORTPOSITIONWSCALENV)(getProcAddr(name))
+	}
+	{
+		name := "glViewportSwizzleNV"
+		if terminated {
+			name = "glViewportSwizzleNV\x00"
+		}
+		gpViewportSwizzleNV = (C.GPVIEWPORTSWIZZLENV)(getProcAddr(name))
+	}
+	{
+		name := "glWaitSemaphoreEXT"
+		if terminated {
+			name = "glWaitSemaphoreEXT\x00"
+		}
+		gpWaitSemaphoreEXT = (C.GPWAITSEMAPHOREEXT)(getProcAddr(name))
+	}
+	{
+		name := "glWaitSync"
+		if terminated {
+			name = "glWaitSync\x00"
+		}
+		gpWaitSync = (C.GPWAITSYNC)(getProcAddr(name))
+		if gpWaitSync == nil && firstMissing == "" {
+			firstMissing = "glWaitSync"
+		}
+	}
+	{
+		name := "glWaitSyncAPPLE"
+		if terminated {
+			name = "glWaitSyncAPPLE\x00"
+		}
+		gpWaitSyncAPPLE = (C.GPWAITSYNCAPPLE)(getProcAddr(name))
+	}
+	{
+		name := "glWaitVkSemaphoreNV"
+		if terminated {
+			name = "glWaitVkSemaphoreNV\x00"
+		}
+		gpWaitVkSemaphoreNV = (C.GPWAITVKSEMAPHORENV)(getProcAddr(name))
+	}
+	{
+		name := "glWeightPathsNV"
+		if terminated {
+			name = "glWeightPathsNV\x00"
+		}
+		gpWeightPathsNV = (C.GPWEIGHTPATHSNV)(getProcAddr(name))
+	}
+	{
+		name := "glWindowRectanglesEXT"
+		if terminated {
+			name = "glWindowRectanglesEXT\x00"
+		}
+		gpWindowRectanglesEXT = (C.GPWINDOWRECTANGLESEXT)(getProcAddr(name))
+	}
+	if firstMissing != "" {
+		return errors.New(firstMissing)
+	}
 	return nil
+}
+
+// IsFunctionAvailable reports whether Init loaded the named procedure in this
+// binding package. Use the original C name, for example "glBindFramebuffer".
+// A non-nil address does not prove context version or extension support.
+// Call on the context's owner thread after a successful Init. As with the
+// bindings themselves, this state is replaced when Init is called again.
+func IsFunctionAvailable(name string) bool {
+	switch name {
+	case "glAcquireKeyedMutexWin32EXT":
+		return gpAcquireKeyedMutexWin32EXT != nil
+	case "glActiveProgramEXT":
+		return gpActiveProgramEXT != nil
+	case "glActiveShaderProgram":
+		return gpActiveShaderProgram != nil
+	case "glActiveShaderProgramEXT":
+		return gpActiveShaderProgramEXT != nil
+	case "glActiveTexture":
+		return gpActiveTexture != nil
+	case "glAlphaFuncQCOM":
+		return gpAlphaFuncQCOM != nil
+	case "glApplyFramebufferAttachmentCMAAINTEL":
+		return gpApplyFramebufferAttachmentCMAAINTEL != nil
+	case "glAttachShader":
+		return gpAttachShader != nil
+	case "glBeginConditionalRenderNV":
+		return gpBeginConditionalRenderNV != nil
+	case "glBeginPerfMonitorAMD":
+		return gpBeginPerfMonitorAMD != nil
+	case "glBeginPerfQueryINTEL":
+		return gpBeginPerfQueryINTEL != nil
+	case "glBeginQuery":
+		return gpBeginQuery != nil
+	case "glBeginQueryEXT":
+		return gpBeginQueryEXT != nil
+	case "glBeginTransformFeedback":
+		return gpBeginTransformFeedback != nil
+	case "glBindAttribLocation":
+		return gpBindAttribLocation != nil
+	case "glBindBuffer":
+		return gpBindBuffer != nil
+	case "glBindBufferBase":
+		return gpBindBufferBase != nil
+	case "glBindBufferRange":
+		return gpBindBufferRange != nil
+	case "glBindFragDataLocationEXT":
+		return gpBindFragDataLocationEXT != nil
+	case "glBindFragDataLocationIndexedEXT":
+		return gpBindFragDataLocationIndexedEXT != nil
+	case "glBindFramebuffer":
+		return gpBindFramebuffer != nil
+	case "glBindImageTexture":
+		return gpBindImageTexture != nil
+	case "glBindProgramPipeline":
+		return gpBindProgramPipeline != nil
+	case "glBindProgramPipelineEXT":
+		return gpBindProgramPipelineEXT != nil
+	case "glBindRenderbuffer":
+		return gpBindRenderbuffer != nil
+	case "glBindSampler":
+		return gpBindSampler != nil
+	case "glBindShadingRateImageNV":
+		return gpBindShadingRateImageNV != nil
+	case "glBindTexture":
+		return gpBindTexture != nil
+	case "glBindTransformFeedback":
+		return gpBindTransformFeedback != nil
+	case "glBindVertexArray":
+		return gpBindVertexArray != nil
+	case "glBindVertexArrayOES":
+		return gpBindVertexArrayOES != nil
+	case "glBindVertexBuffer":
+		return gpBindVertexBuffer != nil
+	case "glBlendBarrier":
+		return gpBlendBarrier != nil
+	case "glBlendBarrierKHR":
+		return gpBlendBarrierKHR != nil
+	case "glBlendBarrierNV":
+		return gpBlendBarrierNV != nil
+	case "glBlendColor":
+		return gpBlendColor != nil
+	case "glBlendEquation":
+		return gpBlendEquation != nil
+	case "glBlendEquationEXT":
+		return gpBlendEquationEXT != nil
+	case "glBlendEquationSeparate":
+		return gpBlendEquationSeparate != nil
+	case "glBlendEquationSeparatei":
+		return gpBlendEquationSeparatei != nil
+	case "glBlendEquationSeparateiEXT":
+		return gpBlendEquationSeparateiEXT != nil
+	case "glBlendEquationSeparateiOES":
+		return gpBlendEquationSeparateiOES != nil
+	case "glBlendEquationi":
+		return gpBlendEquationi != nil
+	case "glBlendEquationiEXT":
+		return gpBlendEquationiEXT != nil
+	case "glBlendEquationiOES":
+		return gpBlendEquationiOES != nil
+	case "glBlendFunc":
+		return gpBlendFunc != nil
+	case "glBlendFuncSeparate":
+		return gpBlendFuncSeparate != nil
+	case "glBlendFuncSeparatei":
+		return gpBlendFuncSeparatei != nil
+	case "glBlendFuncSeparateiEXT":
+		return gpBlendFuncSeparateiEXT != nil
+	case "glBlendFuncSeparateiOES":
+		return gpBlendFuncSeparateiOES != nil
+	case "glBlendFunci":
+		return gpBlendFunci != nil
+	case "glBlendFunciEXT":
+		return gpBlendFunciEXT != nil
+	case "glBlendFunciOES":
+		return gpBlendFunciOES != nil
+	case "glBlendParameteriNV":
+		return gpBlendParameteriNV != nil
+	case "glBlitFramebuffer":
+		return gpBlitFramebuffer != nil
+	case "glBlitFramebufferANGLE":
+		return gpBlitFramebufferANGLE != nil
+	case "glBlitFramebufferLayerEXT":
+		return gpBlitFramebufferLayerEXT != nil
+	case "glBlitFramebufferLayersEXT":
+		return gpBlitFramebufferLayersEXT != nil
+	case "glBlitFramebufferNV":
+		return gpBlitFramebufferNV != nil
+	case "glBufferAttachMemoryNV":
+		return gpBufferAttachMemoryNV != nil
+	case "glBufferData":
+		return gpBufferData != nil
+	case "glBufferPageCommitmentMemNV":
+		return gpBufferPageCommitmentMemNV != nil
+	case "glBufferStorageEXT":
+		return gpBufferStorageEXT != nil
+	case "glBufferStorageExternalEXT":
+		return gpBufferStorageExternalEXT != nil
+	case "glBufferStorageMemEXT":
+		return gpBufferStorageMemEXT != nil
+	case "glBufferSubData":
+		return gpBufferSubData != nil
+	case "glCheckFramebufferStatus":
+		return gpCheckFramebufferStatus != nil
+	case "glClear":
+		return gpClear != nil
+	case "glClearBufferfi":
+		return gpClearBufferfi != nil
+	case "glClearBufferfv":
+		return gpClearBufferfv != nil
+	case "glClearBufferiv":
+		return gpClearBufferiv != nil
+	case "glClearBufferuiv":
+		return gpClearBufferuiv != nil
+	case "glClearColor":
+		return gpClearColor != nil
+	case "glClearDepthf":
+		return gpClearDepthf != nil
+	case "glClearPixelLocalStorageuiEXT":
+		return gpClearPixelLocalStorageuiEXT != nil
+	case "glClearStencil":
+		return gpClearStencil != nil
+	case "glClearTexImageEXT":
+		return gpClearTexImageEXT != nil
+	case "glClearTexSubImageEXT":
+		return gpClearTexSubImageEXT != nil
+	case "glClientWaitSync":
+		return gpClientWaitSync != nil
+	case "glClientWaitSyncAPPLE":
+		return gpClientWaitSyncAPPLE != nil
+	case "glClipControlEXT":
+		return gpClipControlEXT != nil
+	case "glColorMask":
+		return gpColorMask != nil
+	case "glColorMaski":
+		return gpColorMaski != nil
+	case "glColorMaskiEXT":
+		return gpColorMaskiEXT != nil
+	case "glColorMaskiOES":
+		return gpColorMaskiOES != nil
+	case "glCompileShader":
+		return gpCompileShader != nil
+	case "glCompressedTexImage2D":
+		return gpCompressedTexImage2D != nil
+	case "glCompressedTexImage3D":
+		return gpCompressedTexImage3D != nil
+	case "glCompressedTexImage3DOES":
+		return gpCompressedTexImage3DOES != nil
+	case "glCompressedTexSubImage2D":
+		return gpCompressedTexSubImage2D != nil
+	case "glCompressedTexSubImage3D":
+		return gpCompressedTexSubImage3D != nil
+	case "glCompressedTexSubImage3DOES":
+		return gpCompressedTexSubImage3DOES != nil
+	case "glConservativeRasterParameteriNV":
+		return gpConservativeRasterParameteriNV != nil
+	case "glCopyBufferSubData":
+		return gpCopyBufferSubData != nil
+	case "glCopyBufferSubDataNV":
+		return gpCopyBufferSubDataNV != nil
+	case "glCopyImageSubData":
+		return gpCopyImageSubData != nil
+	case "glCopyImageSubDataEXT":
+		return gpCopyImageSubDataEXT != nil
+	case "glCopyImageSubDataOES":
+		return gpCopyImageSubDataOES != nil
+	case "glCopyPathNV":
+		return gpCopyPathNV != nil
+	case "glCopyTexImage2D":
+		return gpCopyTexImage2D != nil
+	case "glCopyTexSubImage2D":
+		return gpCopyTexSubImage2D != nil
+	case "glCopyTexSubImage3D":
+		return gpCopyTexSubImage3D != nil
+	case "glCopyTexSubImage3DOES":
+		return gpCopyTexSubImage3DOES != nil
+	case "glCopyTextureLevelsAPPLE":
+		return gpCopyTextureLevelsAPPLE != nil
+	case "glCoverFillPathInstancedNV":
+		return gpCoverFillPathInstancedNV != nil
+	case "glCoverFillPathNV":
+		return gpCoverFillPathNV != nil
+	case "glCoverStrokePathInstancedNV":
+		return gpCoverStrokePathInstancedNV != nil
+	case "glCoverStrokePathNV":
+		return gpCoverStrokePathNV != nil
+	case "glCoverageMaskNV":
+		return gpCoverageMaskNV != nil
+	case "glCoverageModulationNV":
+		return gpCoverageModulationNV != nil
+	case "glCoverageModulationTableNV":
+		return gpCoverageModulationTableNV != nil
+	case "glCoverageOperationNV":
+		return gpCoverageOperationNV != nil
+	case "glCreateMemoryObjectsEXT":
+		return gpCreateMemoryObjectsEXT != nil
+	case "glCreatePerfQueryINTEL":
+		return gpCreatePerfQueryINTEL != nil
+	case "glCreateProgram":
+		return gpCreateProgram != nil
+	case "glCreateSemaphoresNV":
+		return gpCreateSemaphoresNV != nil
+	case "glCreateShader":
+		return gpCreateShader != nil
+	case "glCreateShaderProgramEXT":
+		return gpCreateShaderProgramEXT != nil
+	case "glCreateShaderProgramv":
+		return gpCreateShaderProgramv != nil
+	case "glCreateShaderProgramvEXT":
+		return gpCreateShaderProgramvEXT != nil
+	case "glCullFace":
+		return gpCullFace != nil
+	case "glDebugMessageCallback":
+		return gpDebugMessageCallback != nil
+	case "glDebugMessageCallbackKHR":
+		return gpDebugMessageCallbackKHR != nil
+	case "glDebugMessageControl":
+		return gpDebugMessageControl != nil
+	case "glDebugMessageControlKHR":
+		return gpDebugMessageControlKHR != nil
+	case "glDebugMessageInsert":
+		return gpDebugMessageInsert != nil
+	case "glDebugMessageInsertKHR":
+		return gpDebugMessageInsertKHR != nil
+	case "glDeleteBuffers":
+		return gpDeleteBuffers != nil
+	case "glDeleteFencesNV":
+		return gpDeleteFencesNV != nil
+	case "glDeleteFramebuffers":
+		return gpDeleteFramebuffers != nil
+	case "glDeleteMemoryObjectsEXT":
+		return gpDeleteMemoryObjectsEXT != nil
+	case "glDeletePathsNV":
+		return gpDeletePathsNV != nil
+	case "glDeletePerfMonitorsAMD":
+		return gpDeletePerfMonitorsAMD != nil
+	case "glDeletePerfQueryINTEL":
+		return gpDeletePerfQueryINTEL != nil
+	case "glDeleteProgram":
+		return gpDeleteProgram != nil
+	case "glDeleteProgramPipelines":
+		return gpDeleteProgramPipelines != nil
+	case "glDeleteProgramPipelinesEXT":
+		return gpDeleteProgramPipelinesEXT != nil
+	case "glDeleteQueries":
+		return gpDeleteQueries != nil
+	case "glDeleteQueriesEXT":
+		return gpDeleteQueriesEXT != nil
+	case "glDeleteRenderbuffers":
+		return gpDeleteRenderbuffers != nil
+	case "glDeleteSamplers":
+		return gpDeleteSamplers != nil
+	case "glDeleteSemaphoresEXT":
+		return gpDeleteSemaphoresEXT != nil
+	case "glDeleteShader":
+		return gpDeleteShader != nil
+	case "glDeleteSync":
+		return gpDeleteSync != nil
+	case "glDeleteSyncAPPLE":
+		return gpDeleteSyncAPPLE != nil
+	case "glDeleteTextures":
+		return gpDeleteTextures != nil
+	case "glDeleteTransformFeedbacks":
+		return gpDeleteTransformFeedbacks != nil
+	case "glDeleteVertexArrays":
+		return gpDeleteVertexArrays != nil
+	case "glDeleteVertexArraysOES":
+		return gpDeleteVertexArraysOES != nil
+	case "glDepthFunc":
+		return gpDepthFunc != nil
+	case "glDepthMask":
+		return gpDepthMask != nil
+	case "glDepthRangeArrayfvNV":
+		return gpDepthRangeArrayfvNV != nil
+	case "glDepthRangeArrayfvOES":
+		return gpDepthRangeArrayfvOES != nil
+	case "glDepthRangeIndexedfNV":
+		return gpDepthRangeIndexedfNV != nil
+	case "glDepthRangeIndexedfOES":
+		return gpDepthRangeIndexedfOES != nil
+	case "glDepthRangef":
+		return gpDepthRangef != nil
+	case "glDetachShader":
+		return gpDetachShader != nil
+	case "glDisable":
+		return gpDisable != nil
+	case "glDisableDriverControlQCOM":
+		return gpDisableDriverControlQCOM != nil
+	case "glDisableVertexAttribArray":
+		return gpDisableVertexAttribArray != nil
+	case "glDisablei":
+		return gpDisablei != nil
+	case "glDisableiEXT":
+		return gpDisableiEXT != nil
+	case "glDisableiNV":
+		return gpDisableiNV != nil
+	case "glDisableiOES":
+		return gpDisableiOES != nil
+	case "glDiscardFramebufferEXT":
+		return gpDiscardFramebufferEXT != nil
+	case "glDispatchCompute":
+		return gpDispatchCompute != nil
+	case "glDispatchComputeIndirect":
+		return gpDispatchComputeIndirect != nil
+	case "glDrawArrays":
+		return gpDrawArrays != nil
+	case "glDrawArraysIndirect":
+		return gpDrawArraysIndirect != nil
+	case "glDrawArraysInstanced":
+		return gpDrawArraysInstanced != nil
+	case "glDrawArraysInstancedANGLE":
+		return gpDrawArraysInstancedANGLE != nil
+	case "glDrawArraysInstancedBaseInstanceEXT":
+		return gpDrawArraysInstancedBaseInstanceEXT != nil
+	case "glDrawArraysInstancedEXT":
+		return gpDrawArraysInstancedEXT != nil
+	case "glDrawArraysInstancedNV":
+		return gpDrawArraysInstancedNV != nil
+	case "glDrawBuffers":
+		return gpDrawBuffers != nil
+	case "glDrawBuffersEXT":
+		return gpDrawBuffersEXT != nil
+	case "glDrawBuffersIndexedEXT":
+		return gpDrawBuffersIndexedEXT != nil
+	case "glDrawBuffersNV":
+		return gpDrawBuffersNV != nil
+	case "glDrawElements":
+		return gpDrawElements != nil
+	case "glDrawElementsBaseVertex":
+		return gpDrawElementsBaseVertex != nil
+	case "glDrawElementsBaseVertexEXT":
+		return gpDrawElementsBaseVertexEXT != nil
+	case "glDrawElementsBaseVertexOES":
+		return gpDrawElementsBaseVertexOES != nil
+	case "glDrawElementsIndirect":
+		return gpDrawElementsIndirect != nil
+	case "glDrawElementsInstanced":
+		return gpDrawElementsInstanced != nil
+	case "glDrawElementsInstancedANGLE":
+		return gpDrawElementsInstancedANGLE != nil
+	case "glDrawElementsInstancedBaseInstanceEXT":
+		return gpDrawElementsInstancedBaseInstanceEXT != nil
+	case "glDrawElementsInstancedBaseVertex":
+		return gpDrawElementsInstancedBaseVertex != nil
+	case "glDrawElementsInstancedBaseVertexBaseInstanceEXT":
+		return gpDrawElementsInstancedBaseVertexBaseInstanceEXT != nil
+	case "glDrawElementsInstancedBaseVertexEXT":
+		return gpDrawElementsInstancedBaseVertexEXT != nil
+	case "glDrawElementsInstancedBaseVertexOES":
+		return gpDrawElementsInstancedBaseVertexOES != nil
+	case "glDrawElementsInstancedEXT":
+		return gpDrawElementsInstancedEXT != nil
+	case "glDrawElementsInstancedNV":
+		return gpDrawElementsInstancedNV != nil
+	case "glDrawMeshTasksEXT":
+		return gpDrawMeshTasksEXT != nil
+	case "glDrawMeshTasksIndirectEXT":
+		return gpDrawMeshTasksIndirectEXT != nil
+	case "glDrawMeshTasksIndirectNV":
+		return gpDrawMeshTasksIndirectNV != nil
+	case "glDrawMeshTasksNV":
+		return gpDrawMeshTasksNV != nil
+	case "glDrawRangeElements":
+		return gpDrawRangeElements != nil
+	case "glDrawRangeElementsBaseVertex":
+		return gpDrawRangeElementsBaseVertex != nil
+	case "glDrawRangeElementsBaseVertexEXT":
+		return gpDrawRangeElementsBaseVertexEXT != nil
+	case "glDrawRangeElementsBaseVertexOES":
+		return gpDrawRangeElementsBaseVertexOES != nil
+	case "glDrawTransformFeedbackEXT":
+		return gpDrawTransformFeedbackEXT != nil
+	case "glDrawTransformFeedbackInstancedEXT":
+		return gpDrawTransformFeedbackInstancedEXT != nil
+	case "glDrawVkImageNV":
+		return gpDrawVkImageNV != nil
+	case "glEGLImageTargetRenderbufferStorageOES":
+		return gpEGLImageTargetRenderbufferStorageOES != nil
+	case "glEGLImageTargetTexStorageEXT":
+		return gpEGLImageTargetTexStorageEXT != nil
+	case "glEGLImageTargetTexture2DOES":
+		return gpEGLImageTargetTexture2DOES != nil
+	case "glEGLImageTargetTextureStorageEXT":
+		return gpEGLImageTargetTextureStorageEXT != nil
+	case "glEnable":
+		return gpEnable != nil
+	case "glEnableDriverControlQCOM":
+		return gpEnableDriverControlQCOM != nil
+	case "glEnableVertexAttribArray":
+		return gpEnableVertexAttribArray != nil
+	case "glEnablei":
+		return gpEnablei != nil
+	case "glEnableiEXT":
+		return gpEnableiEXT != nil
+	case "glEnableiNV":
+		return gpEnableiNV != nil
+	case "glEnableiOES":
+		return gpEnableiOES != nil
+	case "glEndConditionalRenderNV":
+		return gpEndConditionalRenderNV != nil
+	case "glEndPerfMonitorAMD":
+		return gpEndPerfMonitorAMD != nil
+	case "glEndPerfQueryINTEL":
+		return gpEndPerfQueryINTEL != nil
+	case "glEndQuery":
+		return gpEndQuery != nil
+	case "glEndQueryEXT":
+		return gpEndQueryEXT != nil
+	case "glEndTilingQCOM":
+		return gpEndTilingQCOM != nil
+	case "glEndTransformFeedback":
+		return gpEndTransformFeedback != nil
+	case "glExtGetBufferPointervQCOM":
+		return gpExtGetBufferPointervQCOM != nil
+	case "glExtGetBuffersQCOM":
+		return gpExtGetBuffersQCOM != nil
+	case "glExtGetFramebuffersQCOM":
+		return gpExtGetFramebuffersQCOM != nil
+	case "glExtGetProgramBinarySourceQCOM":
+		return gpExtGetProgramBinarySourceQCOM != nil
+	case "glExtGetProgramsQCOM":
+		return gpExtGetProgramsQCOM != nil
+	case "glExtGetRenderbuffersQCOM":
+		return gpExtGetRenderbuffersQCOM != nil
+	case "glExtGetShadersQCOM":
+		return gpExtGetShadersQCOM != nil
+	case "glExtGetTexLevelParameterivQCOM":
+		return gpExtGetTexLevelParameterivQCOM != nil
+	case "glExtGetTexSubImageQCOM":
+		return gpExtGetTexSubImageQCOM != nil
+	case "glExtGetTexturesQCOM":
+		return gpExtGetTexturesQCOM != nil
+	case "glExtIsProgramBinaryQCOM":
+		return gpExtIsProgramBinaryQCOM != nil
+	case "glExtTexObjectStateOverrideiQCOM":
+		return gpExtTexObjectStateOverrideiQCOM != nil
+	case "glExtrapolateTex2DQCOM":
+		return gpExtrapolateTex2DQCOM != nil
+	case "glFenceSync":
+		return gpFenceSync != nil
+	case "glFenceSyncAPPLE":
+		return gpFenceSyncAPPLE != nil
+	case "glFinish":
+		return gpFinish != nil
+	case "glFinishFenceNV":
+		return gpFinishFenceNV != nil
+	case "glFlush":
+		return gpFlush != nil
+	case "glFlushMappedBufferRange":
+		return gpFlushMappedBufferRange != nil
+	case "glFlushMappedBufferRangeEXT":
+		return gpFlushMappedBufferRangeEXT != nil
+	case "glFragmentCoverageColorNV":
+		return gpFragmentCoverageColorNV != nil
+	case "glFramebufferFetchBarrierEXT":
+		return gpFramebufferFetchBarrierEXT != nil
+	case "glFramebufferFetchBarrierQCOM":
+		return gpFramebufferFetchBarrierQCOM != nil
+	case "glFramebufferFoveationConfigQCOM":
+		return gpFramebufferFoveationConfigQCOM != nil
+	case "glFramebufferFoveationParametersQCOM":
+		return gpFramebufferFoveationParametersQCOM != nil
+	case "glFramebufferParameteri":
+		return gpFramebufferParameteri != nil
+	case "glFramebufferParameteriMESA":
+		return gpFramebufferParameteriMESA != nil
+	case "glFramebufferPixelLocalStorageSizeEXT":
+		return gpFramebufferPixelLocalStorageSizeEXT != nil
+	case "glFramebufferRenderbuffer":
+		return gpFramebufferRenderbuffer != nil
+	case "glFramebufferSampleLocationsfvNV":
+		return gpFramebufferSampleLocationsfvNV != nil
+	case "glFramebufferShadingRateEXT":
+		return gpFramebufferShadingRateEXT != nil
+	case "glFramebufferTexture":
+		return gpFramebufferTexture != nil
+	case "glFramebufferTexture2D":
+		return gpFramebufferTexture2D != nil
+	case "glFramebufferTexture2DDownsampleIMG":
+		return gpFramebufferTexture2DDownsampleIMG != nil
+	case "glFramebufferTexture2DMultisampleEXT":
+		return gpFramebufferTexture2DMultisampleEXT != nil
+	case "glFramebufferTexture2DMultisampleIMG":
+		return gpFramebufferTexture2DMultisampleIMG != nil
+	case "glFramebufferTexture3DOES":
+		return gpFramebufferTexture3DOES != nil
+	case "glFramebufferTextureEXT":
+		return gpFramebufferTextureEXT != nil
+	case "glFramebufferTextureLayer":
+		return gpFramebufferTextureLayer != nil
+	case "glFramebufferTextureLayerDownsampleIMG":
+		return gpFramebufferTextureLayerDownsampleIMG != nil
+	case "glFramebufferTextureMultisampleMultiviewOVR":
+		return gpFramebufferTextureMultisampleMultiviewOVR != nil
+	case "glFramebufferTextureMultiviewOVR":
+		return gpFramebufferTextureMultiviewOVR != nil
+	case "glFramebufferTextureOES":
+		return gpFramebufferTextureOES != nil
+	case "glFrontFace":
+		return gpFrontFace != nil
+	case "glGenBuffers":
+		return gpGenBuffers != nil
+	case "glGenFencesNV":
+		return gpGenFencesNV != nil
+	case "glGenFramebuffers":
+		return gpGenFramebuffers != nil
+	case "glGenPathsNV":
+		return gpGenPathsNV != nil
+	case "glGenPerfMonitorsAMD":
+		return gpGenPerfMonitorsAMD != nil
+	case "glGenProgramPipelines":
+		return gpGenProgramPipelines != nil
+	case "glGenProgramPipelinesEXT":
+		return gpGenProgramPipelinesEXT != nil
+	case "glGenQueries":
+		return gpGenQueries != nil
+	case "glGenQueriesEXT":
+		return gpGenQueriesEXT != nil
+	case "glGenRenderbuffers":
+		return gpGenRenderbuffers != nil
+	case "glGenSamplers":
+		return gpGenSamplers != nil
+	case "glGenSemaphoresEXT":
+		return gpGenSemaphoresEXT != nil
+	case "glGenTextures":
+		return gpGenTextures != nil
+	case "glGenTransformFeedbacks":
+		return gpGenTransformFeedbacks != nil
+	case "glGenVertexArrays":
+		return gpGenVertexArrays != nil
+	case "glGenVertexArraysOES":
+		return gpGenVertexArraysOES != nil
+	case "glGenerateMipmap":
+		return gpGenerateMipmap != nil
+	case "glGetActiveAttrib":
+		return gpGetActiveAttrib != nil
+	case "glGetActiveUniform":
+		return gpGetActiveUniform != nil
+	case "glGetActiveUniformBlockName":
+		return gpGetActiveUniformBlockName != nil
+	case "glGetActiveUniformBlockiv":
+		return gpGetActiveUniformBlockiv != nil
+	case "glGetActiveUniformsiv":
+		return gpGetActiveUniformsiv != nil
+	case "glGetAttachedShaders":
+		return gpGetAttachedShaders != nil
+	case "glGetAttribLocation":
+		return gpGetAttribLocation != nil
+	case "glGetBooleani_v":
+		return gpGetBooleani_v != nil
+	case "glGetBooleanv":
+		return gpGetBooleanv != nil
+	case "glGetBufferParameteri64v":
+		return gpGetBufferParameteri64v != nil
+	case "glGetBufferParameteriv":
+		return gpGetBufferParameteriv != nil
+	case "glGetBufferPointerv":
+		return gpGetBufferPointerv != nil
+	case "glGetBufferPointervOES":
+		return gpGetBufferPointervOES != nil
+	case "glGetCoverageModulationTableNV":
+		return gpGetCoverageModulationTableNV != nil
+	case "glGetDebugMessageLog":
+		return gpGetDebugMessageLog != nil
+	case "glGetDebugMessageLogKHR":
+		return gpGetDebugMessageLogKHR != nil
+	case "glGetDriverControlStringQCOM":
+		return gpGetDriverControlStringQCOM != nil
+	case "glGetDriverControlsQCOM":
+		return gpGetDriverControlsQCOM != nil
+	case "glGetError":
+		return gpGetError != nil
+	case "glGetFenceivNV":
+		return gpGetFenceivNV != nil
+	case "glGetFirstPerfQueryIdINTEL":
+		return gpGetFirstPerfQueryIdINTEL != nil
+	case "glGetFloati_vNV":
+		return gpGetFloati_vNV != nil
+	case "glGetFloati_vOES":
+		return gpGetFloati_vOES != nil
+	case "glGetFloatv":
+		return gpGetFloatv != nil
+	case "glGetFragDataIndexEXT":
+		return gpGetFragDataIndexEXT != nil
+	case "glGetFragDataLocation":
+		return gpGetFragDataLocation != nil
+	case "glGetFragmentShadingRatesEXT":
+		return gpGetFragmentShadingRatesEXT != nil
+	case "glGetFramebufferAttachmentParameteriv":
+		return gpGetFramebufferAttachmentParameteriv != nil
+	case "glGetFramebufferParameteriv":
+		return gpGetFramebufferParameteriv != nil
+	case "glGetFramebufferParameterivMESA":
+		return gpGetFramebufferParameterivMESA != nil
+	case "glGetFramebufferPixelLocalStorageSizeEXT":
+		return gpGetFramebufferPixelLocalStorageSizeEXT != nil
+	case "glGetGraphicsResetStatus":
+		return gpGetGraphicsResetStatus != nil
+	case "glGetGraphicsResetStatusEXT":
+		return gpGetGraphicsResetStatusEXT != nil
+	case "glGetGraphicsResetStatusKHR":
+		return gpGetGraphicsResetStatusKHR != nil
+	case "glGetImageHandleNV":
+		return gpGetImageHandleNV != nil
+	case "glGetInteger64i_v":
+		return gpGetInteger64i_v != nil
+	case "glGetInteger64v":
+		return gpGetInteger64v != nil
+	case "glGetInteger64vAPPLE":
+		return gpGetInteger64vAPPLE != nil
+	case "glGetInteger64vEXT":
+		return gpGetInteger64vEXT != nil
+	case "glGetIntegeri_v":
+		return gpGetIntegeri_v != nil
+	case "glGetIntegeri_vEXT":
+		return gpGetIntegeri_vEXT != nil
+	case "glGetIntegerv":
+		return gpGetIntegerv != nil
+	case "glGetInternalformatSampleivNV":
+		return gpGetInternalformatSampleivNV != nil
+	case "glGetInternalformativ":
+		return gpGetInternalformativ != nil
+	case "glGetMemoryObjectDetachedResourcesuivNV":
+		return gpGetMemoryObjectDetachedResourcesuivNV != nil
+	case "glGetMemoryObjectParameterivEXT":
+		return gpGetMemoryObjectParameterivEXT != nil
+	case "glGetMultisamplefv":
+		return gpGetMultisamplefv != nil
+	case "glGetNextPerfQueryIdINTEL":
+		return gpGetNextPerfQueryIdINTEL != nil
+	case "glGetObjectLabel":
+		return gpGetObjectLabel != nil
+	case "glGetObjectLabelEXT":
+		return gpGetObjectLabelEXT != nil
+	case "glGetObjectLabelKHR":
+		return gpGetObjectLabelKHR != nil
+	case "glGetObjectPtrLabel":
+		return gpGetObjectPtrLabel != nil
+	case "glGetObjectPtrLabelKHR":
+		return gpGetObjectPtrLabelKHR != nil
+	case "glGetPathCommandsNV":
+		return gpGetPathCommandsNV != nil
+	case "glGetPathCoordsNV":
+		return gpGetPathCoordsNV != nil
+	case "glGetPathDashArrayNV":
+		return gpGetPathDashArrayNV != nil
+	case "glGetPathLengthNV":
+		return gpGetPathLengthNV != nil
+	case "glGetPathMetricRangeNV":
+		return gpGetPathMetricRangeNV != nil
+	case "glGetPathMetricsNV":
+		return gpGetPathMetricsNV != nil
+	case "glGetPathParameterfvNV":
+		return gpGetPathParameterfvNV != nil
+	case "glGetPathParameterivNV":
+		return gpGetPathParameterivNV != nil
+	case "glGetPathSpacingNV":
+		return gpGetPathSpacingNV != nil
+	case "glGetPerfCounterInfoINTEL":
+		return gpGetPerfCounterInfoINTEL != nil
+	case "glGetPerfMonitorCounterDataAMD":
+		return gpGetPerfMonitorCounterDataAMD != nil
+	case "glGetPerfMonitorCounterInfoAMD":
+		return gpGetPerfMonitorCounterInfoAMD != nil
+	case "glGetPerfMonitorCounterStringAMD":
+		return gpGetPerfMonitorCounterStringAMD != nil
+	case "glGetPerfMonitorCountersAMD":
+		return gpGetPerfMonitorCountersAMD != nil
+	case "glGetPerfMonitorGroupStringAMD":
+		return gpGetPerfMonitorGroupStringAMD != nil
+	case "glGetPerfMonitorGroupsAMD":
+		return gpGetPerfMonitorGroupsAMD != nil
+	case "glGetPerfQueryDataINTEL":
+		return gpGetPerfQueryDataINTEL != nil
+	case "glGetPerfQueryIdByNameINTEL":
+		return gpGetPerfQueryIdByNameINTEL != nil
+	case "glGetPerfQueryInfoINTEL":
+		return gpGetPerfQueryInfoINTEL != nil
+	case "glGetPointerv":
+		return gpGetPointerv != nil
+	case "glGetPointervKHR":
+		return gpGetPointervKHR != nil
+	case "glGetProgramBinary":
+		return gpGetProgramBinary != nil
+	case "glGetProgramBinaryOES":
+		return gpGetProgramBinaryOES != nil
+	case "glGetProgramInfoLog":
+		return gpGetProgramInfoLog != nil
+	case "glGetProgramInterfaceiv":
+		return gpGetProgramInterfaceiv != nil
+	case "glGetProgramPipelineInfoLog":
+		return gpGetProgramPipelineInfoLog != nil
+	case "glGetProgramPipelineInfoLogEXT":
+		return gpGetProgramPipelineInfoLogEXT != nil
+	case "glGetProgramPipelineiv":
+		return gpGetProgramPipelineiv != nil
+	case "glGetProgramPipelineivEXT":
+		return gpGetProgramPipelineivEXT != nil
+	case "glGetProgramResourceIndex":
+		return gpGetProgramResourceIndex != nil
+	case "glGetProgramResourceLocation":
+		return gpGetProgramResourceLocation != nil
+	case "glGetProgramResourceLocationIndexEXT":
+		return gpGetProgramResourceLocationIndexEXT != nil
+	case "glGetProgramResourceName":
+		return gpGetProgramResourceName != nil
+	case "glGetProgramResourcefvNV":
+		return gpGetProgramResourcefvNV != nil
+	case "glGetProgramResourceiv":
+		return gpGetProgramResourceiv != nil
+	case "glGetProgramiv":
+		return gpGetProgramiv != nil
+	case "glGetQueryObjecti64vEXT":
+		return gpGetQueryObjecti64vEXT != nil
+	case "glGetQueryObjectivEXT":
+		return gpGetQueryObjectivEXT != nil
+	case "glGetQueryObjectui64vEXT":
+		return gpGetQueryObjectui64vEXT != nil
+	case "glGetQueryObjectuiv":
+		return gpGetQueryObjectuiv != nil
+	case "glGetQueryObjectuivEXT":
+		return gpGetQueryObjectuivEXT != nil
+	case "glGetQueryiv":
+		return gpGetQueryiv != nil
+	case "glGetQueryivEXT":
+		return gpGetQueryivEXT != nil
+	case "glGetRenderbufferParameteriv":
+		return gpGetRenderbufferParameteriv != nil
+	case "glGetSamplerParameterIiv":
+		return gpGetSamplerParameterIiv != nil
+	case "glGetSamplerParameterIivEXT":
+		return gpGetSamplerParameterIivEXT != nil
+	case "glGetSamplerParameterIivOES":
+		return gpGetSamplerParameterIivOES != nil
+	case "glGetSamplerParameterIuiv":
+		return gpGetSamplerParameterIuiv != nil
+	case "glGetSamplerParameterIuivEXT":
+		return gpGetSamplerParameterIuivEXT != nil
+	case "glGetSamplerParameterIuivOES":
+		return gpGetSamplerParameterIuivOES != nil
+	case "glGetSamplerParameterfv":
+		return gpGetSamplerParameterfv != nil
+	case "glGetSamplerParameteriv":
+		return gpGetSamplerParameteriv != nil
+	case "glGetSemaphoreParameterivNV":
+		return gpGetSemaphoreParameterivNV != nil
+	case "glGetSemaphoreParameterui64vEXT":
+		return gpGetSemaphoreParameterui64vEXT != nil
+	case "glGetShaderInfoLog":
+		return gpGetShaderInfoLog != nil
+	case "glGetShaderPrecisionFormat":
+		return gpGetShaderPrecisionFormat != nil
+	case "glGetShaderSource":
+		return gpGetShaderSource != nil
+	case "glGetShaderiv":
+		return gpGetShaderiv != nil
+	case "glGetShadingRateImagePaletteNV":
+		return gpGetShadingRateImagePaletteNV != nil
+	case "glGetShadingRateSampleLocationivNV":
+		return gpGetShadingRateSampleLocationivNV != nil
+	case "glGetString":
+		return gpGetString != nil
+	case "glGetStringi":
+		return gpGetStringi != nil
+	case "glGetSynciv":
+		return gpGetSynciv != nil
+	case "glGetSyncivAPPLE":
+		return gpGetSyncivAPPLE != nil
+	case "glGetTexLevelParameterfv":
+		return gpGetTexLevelParameterfv != nil
+	case "glGetTexLevelParameteriv":
+		return gpGetTexLevelParameteriv != nil
+	case "glGetTexParameterIiv":
+		return gpGetTexParameterIiv != nil
+	case "glGetTexParameterIivEXT":
+		return gpGetTexParameterIivEXT != nil
+	case "glGetTexParameterIivOES":
+		return gpGetTexParameterIivOES != nil
+	case "glGetTexParameterIuiv":
+		return gpGetTexParameterIuiv != nil
+	case "glGetTexParameterIuivEXT":
+		return gpGetTexParameterIuivEXT != nil
+	case "glGetTexParameterIuivOES":
+		return gpGetTexParameterIuivOES != nil
+	case "glGetTexParameterfv":
+		return gpGetTexParameterfv != nil
+	case "glGetTexParameteriv":
+		return gpGetTexParameteriv != nil
+	case "glGetTextureHandleIMG":
+		return gpGetTextureHandleIMG != nil
+	case "glGetTextureHandleNV":
+		return gpGetTextureHandleNV != nil
+	case "glGetTextureSamplerHandleIMG":
+		return gpGetTextureSamplerHandleIMG != nil
+	case "glGetTextureSamplerHandleNV":
+		return gpGetTextureSamplerHandleNV != nil
+	case "glGetTransformFeedbackVarying":
+		return gpGetTransformFeedbackVarying != nil
+	case "glGetTranslatedShaderSourceANGLE":
+		return gpGetTranslatedShaderSourceANGLE != nil
+	case "glGetUniformBlockIndex":
+		return gpGetUniformBlockIndex != nil
+	case "glGetUniformIndices":
+		return gpGetUniformIndices != nil
+	case "glGetUniformLocation":
+		return gpGetUniformLocation != nil
+	case "glGetUniformfv":
+		return gpGetUniformfv != nil
+	case "glGetUniformi64vNV":
+		return gpGetUniformi64vNV != nil
+	case "glGetUniformiv":
+		return gpGetUniformiv != nil
+	case "glGetUniformuiv":
+		return gpGetUniformuiv != nil
+	case "glGetUnsignedBytei_vEXT":
+		return gpGetUnsignedBytei_vEXT != nil
+	case "glGetUnsignedBytevEXT":
+		return gpGetUnsignedBytevEXT != nil
+	case "glGetVertexAttribIiv":
+		return gpGetVertexAttribIiv != nil
+	case "glGetVertexAttribIuiv":
+		return gpGetVertexAttribIuiv != nil
+	case "glGetVertexAttribPointerv":
+		return gpGetVertexAttribPointerv != nil
+	case "glGetVertexAttribfv":
+		return gpGetVertexAttribfv != nil
+	case "glGetVertexAttribiv":
+		return gpGetVertexAttribiv != nil
+	case "glGetVkProcAddrNV":
+		return gpGetVkProcAddrNV != nil
+	case "glGetnUniformfv":
+		return gpGetnUniformfv != nil
+	case "glGetnUniformfvEXT":
+		return gpGetnUniformfvEXT != nil
+	case "glGetnUniformfvKHR":
+		return gpGetnUniformfvKHR != nil
+	case "glGetnUniformiv":
+		return gpGetnUniformiv != nil
+	case "glGetnUniformivEXT":
+		return gpGetnUniformivEXT != nil
+	case "glGetnUniformivKHR":
+		return gpGetnUniformivKHR != nil
+	case "glGetnUniformuiv":
+		return gpGetnUniformuiv != nil
+	case "glGetnUniformuivKHR":
+		return gpGetnUniformuivKHR != nil
+	case "glHint":
+		return gpHint != nil
+	case "glImportMemoryFdEXT":
+		return gpImportMemoryFdEXT != nil
+	case "glImportMemoryWin32HandleEXT":
+		return gpImportMemoryWin32HandleEXT != nil
+	case "glImportMemoryWin32NameEXT":
+		return gpImportMemoryWin32NameEXT != nil
+	case "glImportSemaphoreFdEXT":
+		return gpImportSemaphoreFdEXT != nil
+	case "glImportSemaphoreWin32HandleEXT":
+		return gpImportSemaphoreWin32HandleEXT != nil
+	case "glImportSemaphoreWin32NameEXT":
+		return gpImportSemaphoreWin32NameEXT != nil
+	case "glInsertEventMarkerEXT":
+		return gpInsertEventMarkerEXT != nil
+	case "glInterpolatePathsNV":
+		return gpInterpolatePathsNV != nil
+	case "glInvalidateFramebuffer":
+		return gpInvalidateFramebuffer != nil
+	case "glInvalidateSubFramebuffer":
+		return gpInvalidateSubFramebuffer != nil
+	case "glIsBuffer":
+		return gpIsBuffer != nil
+	case "glIsEnabled":
+		return gpIsEnabled != nil
+	case "glIsEnabledi":
+		return gpIsEnabledi != nil
+	case "glIsEnablediEXT":
+		return gpIsEnablediEXT != nil
+	case "glIsEnablediNV":
+		return gpIsEnablediNV != nil
+	case "glIsEnablediOES":
+		return gpIsEnablediOES != nil
+	case "glIsFenceNV":
+		return gpIsFenceNV != nil
+	case "glIsFramebuffer":
+		return gpIsFramebuffer != nil
+	case "glIsImageHandleResidentNV":
+		return gpIsImageHandleResidentNV != nil
+	case "glIsMemoryObjectEXT":
+		return gpIsMemoryObjectEXT != nil
+	case "glIsPathNV":
+		return gpIsPathNV != nil
+	case "glIsPointInFillPathNV":
+		return gpIsPointInFillPathNV != nil
+	case "glIsPointInStrokePathNV":
+		return gpIsPointInStrokePathNV != nil
+	case "glIsProgram":
+		return gpIsProgram != nil
+	case "glIsProgramPipeline":
+		return gpIsProgramPipeline != nil
+	case "glIsProgramPipelineEXT":
+		return gpIsProgramPipelineEXT != nil
+	case "glIsQuery":
+		return gpIsQuery != nil
+	case "glIsQueryEXT":
+		return gpIsQueryEXT != nil
+	case "glIsRenderbuffer":
+		return gpIsRenderbuffer != nil
+	case "glIsSampler":
+		return gpIsSampler != nil
+	case "glIsSemaphoreEXT":
+		return gpIsSemaphoreEXT != nil
+	case "glIsShader":
+		return gpIsShader != nil
+	case "glIsSync":
+		return gpIsSync != nil
+	case "glIsSyncAPPLE":
+		return gpIsSyncAPPLE != nil
+	case "glIsTexture":
+		return gpIsTexture != nil
+	case "glIsTextureHandleResidentNV":
+		return gpIsTextureHandleResidentNV != nil
+	case "glIsTransformFeedback":
+		return gpIsTransformFeedback != nil
+	case "glIsVertexArray":
+		return gpIsVertexArray != nil
+	case "glIsVertexArrayOES":
+		return gpIsVertexArrayOES != nil
+	case "glLabelObjectEXT":
+		return gpLabelObjectEXT != nil
+	case "glLineWidth":
+		return gpLineWidth != nil
+	case "glLinkProgram":
+		return gpLinkProgram != nil
+	case "glMakeImageHandleNonResidentNV":
+		return gpMakeImageHandleNonResidentNV != nil
+	case "glMakeImageHandleResidentNV":
+		return gpMakeImageHandleResidentNV != nil
+	case "glMakeTextureHandleNonResidentNV":
+		return gpMakeTextureHandleNonResidentNV != nil
+	case "glMakeTextureHandleResidentNV":
+		return gpMakeTextureHandleResidentNV != nil
+	case "glMapBufferOES":
+		return gpMapBufferOES != nil
+	case "glMapBufferRange":
+		return gpMapBufferRange != nil
+	case "glMapBufferRangeEXT":
+		return gpMapBufferRangeEXT != nil
+	case "glMatrixFrustumEXT":
+		return gpMatrixFrustumEXT != nil
+	case "glMatrixLoad3x2fNV":
+		return gpMatrixLoad3x2fNV != nil
+	case "glMatrixLoad3x3fNV":
+		return gpMatrixLoad3x3fNV != nil
+	case "glMatrixLoadIdentityEXT":
+		return gpMatrixLoadIdentityEXT != nil
+	case "glMatrixLoadTranspose3x3fNV":
+		return gpMatrixLoadTranspose3x3fNV != nil
+	case "glMatrixLoadTransposedEXT":
+		return gpMatrixLoadTransposedEXT != nil
+	case "glMatrixLoadTransposefEXT":
+		return gpMatrixLoadTransposefEXT != nil
+	case "glMatrixLoaddEXT":
+		return gpMatrixLoaddEXT != nil
+	case "glMatrixLoadfEXT":
+		return gpMatrixLoadfEXT != nil
+	case "glMatrixMult3x2fNV":
+		return gpMatrixMult3x2fNV != nil
+	case "glMatrixMult3x3fNV":
+		return gpMatrixMult3x3fNV != nil
+	case "glMatrixMultTranspose3x3fNV":
+		return gpMatrixMultTranspose3x3fNV != nil
+	case "glMatrixMultTransposedEXT":
+		return gpMatrixMultTransposedEXT != nil
+	case "glMatrixMultTransposefEXT":
+		return gpMatrixMultTransposefEXT != nil
+	case "glMatrixMultdEXT":
+		return gpMatrixMultdEXT != nil
+	case "glMatrixMultfEXT":
+		return gpMatrixMultfEXT != nil
+	case "glMatrixOrthoEXT":
+		return gpMatrixOrthoEXT != nil
+	case "glMatrixPopEXT":
+		return gpMatrixPopEXT != nil
+	case "glMatrixPushEXT":
+		return gpMatrixPushEXT != nil
+	case "glMatrixRotatedEXT":
+		return gpMatrixRotatedEXT != nil
+	case "glMatrixRotatefEXT":
+		return gpMatrixRotatefEXT != nil
+	case "glMatrixScaledEXT":
+		return gpMatrixScaledEXT != nil
+	case "glMatrixScalefEXT":
+		return gpMatrixScalefEXT != nil
+	case "glMatrixTranslatedEXT":
+		return gpMatrixTranslatedEXT != nil
+	case "glMatrixTranslatefEXT":
+		return gpMatrixTranslatefEXT != nil
+	case "glMaxActiveShaderCoresARM":
+		return gpMaxActiveShaderCoresARM != nil
+	case "glMaxShaderCompilerThreadsKHR":
+		return gpMaxShaderCompilerThreadsKHR != nil
+	case "glMemoryBarrier":
+		return gpMemoryBarrier != nil
+	case "glMemoryBarrierByRegion":
+		return gpMemoryBarrierByRegion != nil
+	case "glMemoryObjectParameterivEXT":
+		return gpMemoryObjectParameterivEXT != nil
+	case "glMinSampleShading":
+		return gpMinSampleShading != nil
+	case "glMinSampleShadingOES":
+		return gpMinSampleShadingOES != nil
+	case "glMultiDrawArraysEXT":
+		return gpMultiDrawArraysEXT != nil
+	case "glMultiDrawArraysIndirectEXT":
+		return gpMultiDrawArraysIndirectEXT != nil
+	case "glMultiDrawElementsBaseVertexEXT":
+		return gpMultiDrawElementsBaseVertexEXT != nil
+	case "glMultiDrawElementsEXT":
+		return gpMultiDrawElementsEXT != nil
+	case "glMultiDrawElementsIndirectEXT":
+		return gpMultiDrawElementsIndirectEXT != nil
+	case "glMultiDrawMeshTasksIndirectCountEXT":
+		return gpMultiDrawMeshTasksIndirectCountEXT != nil
+	case "glMultiDrawMeshTasksIndirectCountNV":
+		return gpMultiDrawMeshTasksIndirectCountNV != nil
+	case "glMultiDrawMeshTasksIndirectEXT":
+		return gpMultiDrawMeshTasksIndirectEXT != nil
+	case "glMultiDrawMeshTasksIndirectNV":
+		return gpMultiDrawMeshTasksIndirectNV != nil
+	case "glNamedBufferAttachMemoryNV":
+		return gpNamedBufferAttachMemoryNV != nil
+	case "glNamedBufferPageCommitmentMemNV":
+		return gpNamedBufferPageCommitmentMemNV != nil
+	case "glNamedBufferStorageExternalEXT":
+		return gpNamedBufferStorageExternalEXT != nil
+	case "glNamedBufferStorageMemEXT":
+		return gpNamedBufferStorageMemEXT != nil
+	case "glNamedFramebufferSampleLocationsfvNV":
+		return gpNamedFramebufferSampleLocationsfvNV != nil
+	case "glNamedFramebufferTextureMultiviewOVR":
+		return gpNamedFramebufferTextureMultiviewOVR != nil
+	case "glNamedRenderbufferStorageMultisampleAdvancedAMD":
+		return gpNamedRenderbufferStorageMultisampleAdvancedAMD != nil
+	case "glObjectLabel":
+		return gpObjectLabel != nil
+	case "glObjectLabelKHR":
+		return gpObjectLabelKHR != nil
+	case "glObjectPtrLabel":
+		return gpObjectPtrLabel != nil
+	case "glObjectPtrLabelKHR":
+		return gpObjectPtrLabelKHR != nil
+	case "glPatchParameteri":
+		return gpPatchParameteri != nil
+	case "glPatchParameteriEXT":
+		return gpPatchParameteriEXT != nil
+	case "glPatchParameteriOES":
+		return gpPatchParameteriOES != nil
+	case "glPathCommandsNV":
+		return gpPathCommandsNV != nil
+	case "glPathCoordsNV":
+		return gpPathCoordsNV != nil
+	case "glPathCoverDepthFuncNV":
+		return gpPathCoverDepthFuncNV != nil
+	case "glPathDashArrayNV":
+		return gpPathDashArrayNV != nil
+	case "glPathGlyphIndexArrayNV":
+		return gpPathGlyphIndexArrayNV != nil
+	case "glPathGlyphIndexRangeNV":
+		return gpPathGlyphIndexRangeNV != nil
+	case "glPathGlyphRangeNV":
+		return gpPathGlyphRangeNV != nil
+	case "glPathGlyphsNV":
+		return gpPathGlyphsNV != nil
+	case "glPathMemoryGlyphIndexArrayNV":
+		return gpPathMemoryGlyphIndexArrayNV != nil
+	case "glPathParameterfNV":
+		return gpPathParameterfNV != nil
+	case "glPathParameterfvNV":
+		return gpPathParameterfvNV != nil
+	case "glPathParameteriNV":
+		return gpPathParameteriNV != nil
+	case "glPathParameterivNV":
+		return gpPathParameterivNV != nil
+	case "glPathStencilDepthOffsetNV":
+		return gpPathStencilDepthOffsetNV != nil
+	case "glPathStencilFuncNV":
+		return gpPathStencilFuncNV != nil
+	case "glPathStringNV":
+		return gpPathStringNV != nil
+	case "glPathSubCommandsNV":
+		return gpPathSubCommandsNV != nil
+	case "glPathSubCoordsNV":
+		return gpPathSubCoordsNV != nil
+	case "glPauseTransformFeedback":
+		return gpPauseTransformFeedback != nil
+	case "glPixelStorei":
+		return gpPixelStorei != nil
+	case "glPointAlongPathNV":
+		return gpPointAlongPathNV != nil
+	case "glPolygonModeNV":
+		return gpPolygonModeNV != nil
+	case "glPolygonOffset":
+		return gpPolygonOffset != nil
+	case "glPolygonOffsetClampEXT":
+		return gpPolygonOffsetClampEXT != nil
+	case "glPopDebugGroup":
+		return gpPopDebugGroup != nil
+	case "glPopDebugGroupKHR":
+		return gpPopDebugGroupKHR != nil
+	case "glPopGroupMarkerEXT":
+		return gpPopGroupMarkerEXT != nil
+	case "glPrimitiveBoundingBox":
+		return gpPrimitiveBoundingBox != nil
+	case "glPrimitiveBoundingBoxEXT":
+		return gpPrimitiveBoundingBoxEXT != nil
+	case "glPrimitiveBoundingBoxOES":
+		return gpPrimitiveBoundingBoxOES != nil
+	case "glProgramBinary":
+		return gpProgramBinary != nil
+	case "glProgramBinaryOES":
+		return gpProgramBinaryOES != nil
+	case "glProgramParameteri":
+		return gpProgramParameteri != nil
+	case "glProgramParameteriEXT":
+		return gpProgramParameteriEXT != nil
+	case "glProgramPathFragmentInputGenNV":
+		return gpProgramPathFragmentInputGenNV != nil
+	case "glProgramUniform1f":
+		return gpProgramUniform1f != nil
+	case "glProgramUniform1fEXT":
+		return gpProgramUniform1fEXT != nil
+	case "glProgramUniform1fv":
+		return gpProgramUniform1fv != nil
+	case "glProgramUniform1fvEXT":
+		return gpProgramUniform1fvEXT != nil
+	case "glProgramUniform1i":
+		return gpProgramUniform1i != nil
+	case "glProgramUniform1i64NV":
+		return gpProgramUniform1i64NV != nil
+	case "glProgramUniform1i64vNV":
+		return gpProgramUniform1i64vNV != nil
+	case "glProgramUniform1iEXT":
+		return gpProgramUniform1iEXT != nil
+	case "glProgramUniform1iv":
+		return gpProgramUniform1iv != nil
+	case "glProgramUniform1ivEXT":
+		return gpProgramUniform1ivEXT != nil
+	case "glProgramUniform1ui":
+		return gpProgramUniform1ui != nil
+	case "glProgramUniform1ui64NV":
+		return gpProgramUniform1ui64NV != nil
+	case "glProgramUniform1ui64vNV":
+		return gpProgramUniform1ui64vNV != nil
+	case "glProgramUniform1uiEXT":
+		return gpProgramUniform1uiEXT != nil
+	case "glProgramUniform1uiv":
+		return gpProgramUniform1uiv != nil
+	case "glProgramUniform1uivEXT":
+		return gpProgramUniform1uivEXT != nil
+	case "glProgramUniform2f":
+		return gpProgramUniform2f != nil
+	case "glProgramUniform2fEXT":
+		return gpProgramUniform2fEXT != nil
+	case "glProgramUniform2fv":
+		return gpProgramUniform2fv != nil
+	case "glProgramUniform2fvEXT":
+		return gpProgramUniform2fvEXT != nil
+	case "glProgramUniform2i":
+		return gpProgramUniform2i != nil
+	case "glProgramUniform2i64NV":
+		return gpProgramUniform2i64NV != nil
+	case "glProgramUniform2i64vNV":
+		return gpProgramUniform2i64vNV != nil
+	case "glProgramUniform2iEXT":
+		return gpProgramUniform2iEXT != nil
+	case "glProgramUniform2iv":
+		return gpProgramUniform2iv != nil
+	case "glProgramUniform2ivEXT":
+		return gpProgramUniform2ivEXT != nil
+	case "glProgramUniform2ui":
+		return gpProgramUniform2ui != nil
+	case "glProgramUniform2ui64NV":
+		return gpProgramUniform2ui64NV != nil
+	case "glProgramUniform2ui64vNV":
+		return gpProgramUniform2ui64vNV != nil
+	case "glProgramUniform2uiEXT":
+		return gpProgramUniform2uiEXT != nil
+	case "glProgramUniform2uiv":
+		return gpProgramUniform2uiv != nil
+	case "glProgramUniform2uivEXT":
+		return gpProgramUniform2uivEXT != nil
+	case "glProgramUniform3f":
+		return gpProgramUniform3f != nil
+	case "glProgramUniform3fEXT":
+		return gpProgramUniform3fEXT != nil
+	case "glProgramUniform3fv":
+		return gpProgramUniform3fv != nil
+	case "glProgramUniform3fvEXT":
+		return gpProgramUniform3fvEXT != nil
+	case "glProgramUniform3i":
+		return gpProgramUniform3i != nil
+	case "glProgramUniform3i64NV":
+		return gpProgramUniform3i64NV != nil
+	case "glProgramUniform3i64vNV":
+		return gpProgramUniform3i64vNV != nil
+	case "glProgramUniform3iEXT":
+		return gpProgramUniform3iEXT != nil
+	case "glProgramUniform3iv":
+		return gpProgramUniform3iv != nil
+	case "glProgramUniform3ivEXT":
+		return gpProgramUniform3ivEXT != nil
+	case "glProgramUniform3ui":
+		return gpProgramUniform3ui != nil
+	case "glProgramUniform3ui64NV":
+		return gpProgramUniform3ui64NV != nil
+	case "glProgramUniform3ui64vNV":
+		return gpProgramUniform3ui64vNV != nil
+	case "glProgramUniform3uiEXT":
+		return gpProgramUniform3uiEXT != nil
+	case "glProgramUniform3uiv":
+		return gpProgramUniform3uiv != nil
+	case "glProgramUniform3uivEXT":
+		return gpProgramUniform3uivEXT != nil
+	case "glProgramUniform4f":
+		return gpProgramUniform4f != nil
+	case "glProgramUniform4fEXT":
+		return gpProgramUniform4fEXT != nil
+	case "glProgramUniform4fv":
+		return gpProgramUniform4fv != nil
+	case "glProgramUniform4fvEXT":
+		return gpProgramUniform4fvEXT != nil
+	case "glProgramUniform4i":
+		return gpProgramUniform4i != nil
+	case "glProgramUniform4i64NV":
+		return gpProgramUniform4i64NV != nil
+	case "glProgramUniform4i64vNV":
+		return gpProgramUniform4i64vNV != nil
+	case "glProgramUniform4iEXT":
+		return gpProgramUniform4iEXT != nil
+	case "glProgramUniform4iv":
+		return gpProgramUniform4iv != nil
+	case "glProgramUniform4ivEXT":
+		return gpProgramUniform4ivEXT != nil
+	case "glProgramUniform4ui":
+		return gpProgramUniform4ui != nil
+	case "glProgramUniform4ui64NV":
+		return gpProgramUniform4ui64NV != nil
+	case "glProgramUniform4ui64vNV":
+		return gpProgramUniform4ui64vNV != nil
+	case "glProgramUniform4uiEXT":
+		return gpProgramUniform4uiEXT != nil
+	case "glProgramUniform4uiv":
+		return gpProgramUniform4uiv != nil
+	case "glProgramUniform4uivEXT":
+		return gpProgramUniform4uivEXT != nil
+	case "glProgramUniformHandleui64IMG":
+		return gpProgramUniformHandleui64IMG != nil
+	case "glProgramUniformHandleui64NV":
+		return gpProgramUniformHandleui64NV != nil
+	case "glProgramUniformHandleui64vIMG":
+		return gpProgramUniformHandleui64vIMG != nil
+	case "glProgramUniformHandleui64vNV":
+		return gpProgramUniformHandleui64vNV != nil
+	case "glProgramUniformMatrix2fv":
+		return gpProgramUniformMatrix2fv != nil
+	case "glProgramUniformMatrix2fvEXT":
+		return gpProgramUniformMatrix2fvEXT != nil
+	case "glProgramUniformMatrix2x3fv":
+		return gpProgramUniformMatrix2x3fv != nil
+	case "glProgramUniformMatrix2x3fvEXT":
+		return gpProgramUniformMatrix2x3fvEXT != nil
+	case "glProgramUniformMatrix2x4fv":
+		return gpProgramUniformMatrix2x4fv != nil
+	case "glProgramUniformMatrix2x4fvEXT":
+		return gpProgramUniformMatrix2x4fvEXT != nil
+	case "glProgramUniformMatrix3fv":
+		return gpProgramUniformMatrix3fv != nil
+	case "glProgramUniformMatrix3fvEXT":
+		return gpProgramUniformMatrix3fvEXT != nil
+	case "glProgramUniformMatrix3x2fv":
+		return gpProgramUniformMatrix3x2fv != nil
+	case "glProgramUniformMatrix3x2fvEXT":
+		return gpProgramUniformMatrix3x2fvEXT != nil
+	case "glProgramUniformMatrix3x4fv":
+		return gpProgramUniformMatrix3x4fv != nil
+	case "glProgramUniformMatrix3x4fvEXT":
+		return gpProgramUniformMatrix3x4fvEXT != nil
+	case "glProgramUniformMatrix4fv":
+		return gpProgramUniformMatrix4fv != nil
+	case "glProgramUniformMatrix4fvEXT":
+		return gpProgramUniformMatrix4fvEXT != nil
+	case "glProgramUniformMatrix4x2fv":
+		return gpProgramUniformMatrix4x2fv != nil
+	case "glProgramUniformMatrix4x2fvEXT":
+		return gpProgramUniformMatrix4x2fvEXT != nil
+	case "glProgramUniformMatrix4x3fv":
+		return gpProgramUniformMatrix4x3fv != nil
+	case "glProgramUniformMatrix4x3fvEXT":
+		return gpProgramUniformMatrix4x3fvEXT != nil
+	case "glPushDebugGroup":
+		return gpPushDebugGroup != nil
+	case "glPushDebugGroupKHR":
+		return gpPushDebugGroupKHR != nil
+	case "glPushGroupMarkerEXT":
+		return gpPushGroupMarkerEXT != nil
+	case "glQueryCounterEXT":
+		return gpQueryCounterEXT != nil
+	case "glRasterSamplesEXT":
+		return gpRasterSamplesEXT != nil
+	case "glReadBuffer":
+		return gpReadBuffer != nil
+	case "glReadBufferIndexedEXT":
+		return gpReadBufferIndexedEXT != nil
+	case "glReadBufferNV":
+		return gpReadBufferNV != nil
+	case "glReadPixels":
+		return gpReadPixels != nil
+	case "glReadnPixels":
+		return gpReadnPixels != nil
+	case "glReadnPixelsEXT":
+		return gpReadnPixelsEXT != nil
+	case "glReadnPixelsKHR":
+		return gpReadnPixelsKHR != nil
+	case "glReleaseKeyedMutexWin32EXT":
+		return gpReleaseKeyedMutexWin32EXT != nil
+	case "glReleaseShaderCompiler":
+		return gpReleaseShaderCompiler != nil
+	case "glRenderbufferStorage":
+		return gpRenderbufferStorage != nil
+	case "glRenderbufferStorageMultisample":
+		return gpRenderbufferStorageMultisample != nil
+	case "glRenderbufferStorageMultisampleANGLE":
+		return gpRenderbufferStorageMultisampleANGLE != nil
+	case "glRenderbufferStorageMultisampleAPPLE":
+		return gpRenderbufferStorageMultisampleAPPLE != nil
+	case "glRenderbufferStorageMultisampleAdvancedAMD":
+		return gpRenderbufferStorageMultisampleAdvancedAMD != nil
+	case "glRenderbufferStorageMultisampleEXT":
+		return gpRenderbufferStorageMultisampleEXT != nil
+	case "glRenderbufferStorageMultisampleIMG":
+		return gpRenderbufferStorageMultisampleIMG != nil
+	case "glRenderbufferStorageMultisampleNV":
+		return gpRenderbufferStorageMultisampleNV != nil
+	case "glResetMemoryObjectParameterNV":
+		return gpResetMemoryObjectParameterNV != nil
+	case "glResolveDepthValuesNV":
+		return gpResolveDepthValuesNV != nil
+	case "glResolveMultisampleFramebufferAPPLE":
+		return gpResolveMultisampleFramebufferAPPLE != nil
+	case "glResumeTransformFeedback":
+		return gpResumeTransformFeedback != nil
+	case "glSampleCoverage":
+		return gpSampleCoverage != nil
+	case "glSampleMaski":
+		return gpSampleMaski != nil
+	case "glSamplerParameterIiv":
+		return gpSamplerParameterIiv != nil
+	case "glSamplerParameterIivEXT":
+		return gpSamplerParameterIivEXT != nil
+	case "glSamplerParameterIivOES":
+		return gpSamplerParameterIivOES != nil
+	case "glSamplerParameterIuiv":
+		return gpSamplerParameterIuiv != nil
+	case "glSamplerParameterIuivEXT":
+		return gpSamplerParameterIuivEXT != nil
+	case "glSamplerParameterIuivOES":
+		return gpSamplerParameterIuivOES != nil
+	case "glSamplerParameterf":
+		return gpSamplerParameterf != nil
+	case "glSamplerParameterfv":
+		return gpSamplerParameterfv != nil
+	case "glSamplerParameteri":
+		return gpSamplerParameteri != nil
+	case "glSamplerParameteriv":
+		return gpSamplerParameteriv != nil
+	case "glScissor":
+		return gpScissor != nil
+	case "glScissorArrayvNV":
+		return gpScissorArrayvNV != nil
+	case "glScissorArrayvOES":
+		return gpScissorArrayvOES != nil
+	case "glScissorExclusiveArrayvNV":
+		return gpScissorExclusiveArrayvNV != nil
+	case "glScissorExclusiveNV":
+		return gpScissorExclusiveNV != nil
+	case "glScissorIndexedNV":
+		return gpScissorIndexedNV != nil
+	case "glScissorIndexedOES":
+		return gpScissorIndexedOES != nil
+	case "glScissorIndexedvNV":
+		return gpScissorIndexedvNV != nil
+	case "glScissorIndexedvOES":
+		return gpScissorIndexedvOES != nil
+	case "glSelectPerfMonitorCountersAMD":
+		return gpSelectPerfMonitorCountersAMD != nil
+	case "glSemaphoreParameterivNV":
+		return gpSemaphoreParameterivNV != nil
+	case "glSemaphoreParameterui64vEXT":
+		return gpSemaphoreParameterui64vEXT != nil
+	case "glSetFenceNV":
+		return gpSetFenceNV != nil
+	case "glShaderBinary":
+		return gpShaderBinary != nil
+	case "glShaderSource":
+		return gpShaderSource != nil
+	case "glShadingRateCombinerOpsEXT":
+		return gpShadingRateCombinerOpsEXT != nil
+	case "glShadingRateEXT":
+		return gpShadingRateEXT != nil
+	case "glShadingRateImageBarrierNV":
+		return gpShadingRateImageBarrierNV != nil
+	case "glShadingRateImagePaletteNV":
+		return gpShadingRateImagePaletteNV != nil
+	case "glShadingRateQCOM":
+		return gpShadingRateQCOM != nil
+	case "glShadingRateSampleOrderCustomNV":
+		return gpShadingRateSampleOrderCustomNV != nil
+	case "glShadingRateSampleOrderNV":
+		return gpShadingRateSampleOrderNV != nil
+	case "glSignalSemaphoreEXT":
+		return gpSignalSemaphoreEXT != nil
+	case "glSignalVkFenceNV":
+		return gpSignalVkFenceNV != nil
+	case "glSignalVkSemaphoreNV":
+		return gpSignalVkSemaphoreNV != nil
+	case "glStartTilingQCOM":
+		return gpStartTilingQCOM != nil
+	case "glStencilFillPathInstancedNV":
+		return gpStencilFillPathInstancedNV != nil
+	case "glStencilFillPathNV":
+		return gpStencilFillPathNV != nil
+	case "glStencilFunc":
+		return gpStencilFunc != nil
+	case "glStencilFuncSeparate":
+		return gpStencilFuncSeparate != nil
+	case "glStencilMask":
+		return gpStencilMask != nil
+	case "glStencilMaskSeparate":
+		return gpStencilMaskSeparate != nil
+	case "glStencilOp":
+		return gpStencilOp != nil
+	case "glStencilOpSeparate":
+		return gpStencilOpSeparate != nil
+	case "glStencilStrokePathInstancedNV":
+		return gpStencilStrokePathInstancedNV != nil
+	case "glStencilStrokePathNV":
+		return gpStencilStrokePathNV != nil
+	case "glStencilThenCoverFillPathInstancedNV":
+		return gpStencilThenCoverFillPathInstancedNV != nil
+	case "glStencilThenCoverFillPathNV":
+		return gpStencilThenCoverFillPathNV != nil
+	case "glStencilThenCoverStrokePathInstancedNV":
+		return gpStencilThenCoverStrokePathInstancedNV != nil
+	case "glStencilThenCoverStrokePathNV":
+		return gpStencilThenCoverStrokePathNV != nil
+	case "glSubpixelPrecisionBiasNV":
+		return gpSubpixelPrecisionBiasNV != nil
+	case "glTestFenceNV":
+		return gpTestFenceNV != nil
+	case "glTexAttachMemoryNV":
+		return gpTexAttachMemoryNV != nil
+	case "glTexBuffer":
+		return gpTexBuffer != nil
+	case "glTexBufferEXT":
+		return gpTexBufferEXT != nil
+	case "glTexBufferOES":
+		return gpTexBufferOES != nil
+	case "glTexBufferRange":
+		return gpTexBufferRange != nil
+	case "glTexBufferRangeEXT":
+		return gpTexBufferRangeEXT != nil
+	case "glTexBufferRangeOES":
+		return gpTexBufferRangeOES != nil
+	case "glTexEstimateMotionQCOM":
+		return gpTexEstimateMotionQCOM != nil
+	case "glTexEstimateMotionRegionsQCOM":
+		return gpTexEstimateMotionRegionsQCOM != nil
+	case "glTexImage2D":
+		return gpTexImage2D != nil
+	case "glTexImage3D":
+		return gpTexImage3D != nil
+	case "glTexImage3DOES":
+		return gpTexImage3DOES != nil
+	case "glTexPageCommitmentEXT":
+		return gpTexPageCommitmentEXT != nil
+	case "glTexPageCommitmentMemNV":
+		return gpTexPageCommitmentMemNV != nil
+	case "glTexParameterIiv":
+		return gpTexParameterIiv != nil
+	case "glTexParameterIivEXT":
+		return gpTexParameterIivEXT != nil
+	case "glTexParameterIivOES":
+		return gpTexParameterIivOES != nil
+	case "glTexParameterIuiv":
+		return gpTexParameterIuiv != nil
+	case "glTexParameterIuivEXT":
+		return gpTexParameterIuivEXT != nil
+	case "glTexParameterIuivOES":
+		return gpTexParameterIuivOES != nil
+	case "glTexParameterf":
+		return gpTexParameterf != nil
+	case "glTexParameterfv":
+		return gpTexParameterfv != nil
+	case "glTexParameteri":
+		return gpTexParameteri != nil
+	case "glTexParameteriv":
+		return gpTexParameteriv != nil
+	case "glTexStorage1DEXT":
+		return gpTexStorage1DEXT != nil
+	case "glTexStorage2D":
+		return gpTexStorage2D != nil
+	case "glTexStorage2DEXT":
+		return gpTexStorage2DEXT != nil
+	case "glTexStorage2DMultisample":
+		return gpTexStorage2DMultisample != nil
+	case "glTexStorage3D":
+		return gpTexStorage3D != nil
+	case "glTexStorage3DEXT":
+		return gpTexStorage3DEXT != nil
+	case "glTexStorage3DMultisample":
+		return gpTexStorage3DMultisample != nil
+	case "glTexStorage3DMultisampleOES":
+		return gpTexStorage3DMultisampleOES != nil
+	case "glTexStorageAttribs2DEXT":
+		return gpTexStorageAttribs2DEXT != nil
+	case "glTexStorageAttribs3DEXT":
+		return gpTexStorageAttribs3DEXT != nil
+	case "glTexStorageMem1DEXT":
+		return gpTexStorageMem1DEXT != nil
+	case "glTexStorageMem2DEXT":
+		return gpTexStorageMem2DEXT != nil
+	case "glTexStorageMem2DMultisampleEXT":
+		return gpTexStorageMem2DMultisampleEXT != nil
+	case "glTexStorageMem3DEXT":
+		return gpTexStorageMem3DEXT != nil
+	case "glTexStorageMem3DMultisampleEXT":
+		return gpTexStorageMem3DMultisampleEXT != nil
+	case "glTexSubImage2D":
+		return gpTexSubImage2D != nil
+	case "glTexSubImage3D":
+		return gpTexSubImage3D != nil
+	case "glTexSubImage3DOES":
+		return gpTexSubImage3DOES != nil
+	case "glTextureAttachMemoryNV":
+		return gpTextureAttachMemoryNV != nil
+	case "glTextureBarrierNV":
+		return gpTextureBarrierNV != nil
+	case "glTextureFoveationParametersQCOM":
+		return gpTextureFoveationParametersQCOM != nil
+	case "glTexturePageCommitmentMemNV":
+		return gpTexturePageCommitmentMemNV != nil
+	case "glTextureStorage1DEXT":
+		return gpTextureStorage1DEXT != nil
+	case "glTextureStorage2DEXT":
+		return gpTextureStorage2DEXT != nil
+	case "glTextureStorage3DEXT":
+		return gpTextureStorage3DEXT != nil
+	case "glTextureStorageMem1DEXT":
+		return gpTextureStorageMem1DEXT != nil
+	case "glTextureStorageMem2DEXT":
+		return gpTextureStorageMem2DEXT != nil
+	case "glTextureStorageMem2DMultisampleEXT":
+		return gpTextureStorageMem2DMultisampleEXT != nil
+	case "glTextureStorageMem3DEXT":
+		return gpTextureStorageMem3DEXT != nil
+	case "glTextureStorageMem3DMultisampleEXT":
+		return gpTextureStorageMem3DMultisampleEXT != nil
+	case "glTextureViewEXT":
+		return gpTextureViewEXT != nil
+	case "glTextureViewOES":
+		return gpTextureViewOES != nil
+	case "glTransformFeedbackVaryings":
+		return gpTransformFeedbackVaryings != nil
+	case "glTransformPathNV":
+		return gpTransformPathNV != nil
+	case "glUniform1f":
+		return gpUniform1f != nil
+	case "glUniform1fv":
+		return gpUniform1fv != nil
+	case "glUniform1i":
+		return gpUniform1i != nil
+	case "glUniform1i64NV":
+		return gpUniform1i64NV != nil
+	case "glUniform1i64vNV":
+		return gpUniform1i64vNV != nil
+	case "glUniform1iv":
+		return gpUniform1iv != nil
+	case "glUniform1ui":
+		return gpUniform1ui != nil
+	case "glUniform1ui64NV":
+		return gpUniform1ui64NV != nil
+	case "glUniform1ui64vNV":
+		return gpUniform1ui64vNV != nil
+	case "glUniform1uiv":
+		return gpUniform1uiv != nil
+	case "glUniform2f":
+		return gpUniform2f != nil
+	case "glUniform2fv":
+		return gpUniform2fv != nil
+	case "glUniform2i":
+		return gpUniform2i != nil
+	case "glUniform2i64NV":
+		return gpUniform2i64NV != nil
+	case "glUniform2i64vNV":
+		return gpUniform2i64vNV != nil
+	case "glUniform2iv":
+		return gpUniform2iv != nil
+	case "glUniform2ui":
+		return gpUniform2ui != nil
+	case "glUniform2ui64NV":
+		return gpUniform2ui64NV != nil
+	case "glUniform2ui64vNV":
+		return gpUniform2ui64vNV != nil
+	case "glUniform2uiv":
+		return gpUniform2uiv != nil
+	case "glUniform3f":
+		return gpUniform3f != nil
+	case "glUniform3fv":
+		return gpUniform3fv != nil
+	case "glUniform3i":
+		return gpUniform3i != nil
+	case "glUniform3i64NV":
+		return gpUniform3i64NV != nil
+	case "glUniform3i64vNV":
+		return gpUniform3i64vNV != nil
+	case "glUniform3iv":
+		return gpUniform3iv != nil
+	case "glUniform3ui":
+		return gpUniform3ui != nil
+	case "glUniform3ui64NV":
+		return gpUniform3ui64NV != nil
+	case "glUniform3ui64vNV":
+		return gpUniform3ui64vNV != nil
+	case "glUniform3uiv":
+		return gpUniform3uiv != nil
+	case "glUniform4f":
+		return gpUniform4f != nil
+	case "glUniform4fv":
+		return gpUniform4fv != nil
+	case "glUniform4i":
+		return gpUniform4i != nil
+	case "glUniform4i64NV":
+		return gpUniform4i64NV != nil
+	case "glUniform4i64vNV":
+		return gpUniform4i64vNV != nil
+	case "glUniform4iv":
+		return gpUniform4iv != nil
+	case "glUniform4ui":
+		return gpUniform4ui != nil
+	case "glUniform4ui64NV":
+		return gpUniform4ui64NV != nil
+	case "glUniform4ui64vNV":
+		return gpUniform4ui64vNV != nil
+	case "glUniform4uiv":
+		return gpUniform4uiv != nil
+	case "glUniformBlockBinding":
+		return gpUniformBlockBinding != nil
+	case "glUniformHandleui64IMG":
+		return gpUniformHandleui64IMG != nil
+	case "glUniformHandleui64NV":
+		return gpUniformHandleui64NV != nil
+	case "glUniformHandleui64vIMG":
+		return gpUniformHandleui64vIMG != nil
+	case "glUniformHandleui64vNV":
+		return gpUniformHandleui64vNV != nil
+	case "glUniformMatrix2fv":
+		return gpUniformMatrix2fv != nil
+	case "glUniformMatrix2x3fv":
+		return gpUniformMatrix2x3fv != nil
+	case "glUniformMatrix2x3fvNV":
+		return gpUniformMatrix2x3fvNV != nil
+	case "glUniformMatrix2x4fv":
+		return gpUniformMatrix2x4fv != nil
+	case "glUniformMatrix2x4fvNV":
+		return gpUniformMatrix2x4fvNV != nil
+	case "glUniformMatrix3fv":
+		return gpUniformMatrix3fv != nil
+	case "glUniformMatrix3x2fv":
+		return gpUniformMatrix3x2fv != nil
+	case "glUniformMatrix3x2fvNV":
+		return gpUniformMatrix3x2fvNV != nil
+	case "glUniformMatrix3x4fv":
+		return gpUniformMatrix3x4fv != nil
+	case "glUniformMatrix3x4fvNV":
+		return gpUniformMatrix3x4fvNV != nil
+	case "glUniformMatrix4fv":
+		return gpUniformMatrix4fv != nil
+	case "glUniformMatrix4x2fv":
+		return gpUniformMatrix4x2fv != nil
+	case "glUniformMatrix4x2fvNV":
+		return gpUniformMatrix4x2fvNV != nil
+	case "glUniformMatrix4x3fv":
+		return gpUniformMatrix4x3fv != nil
+	case "glUniformMatrix4x3fvNV":
+		return gpUniformMatrix4x3fvNV != nil
+	case "glUnmapBuffer":
+		return gpUnmapBuffer != nil
+	case "glUnmapBufferOES":
+		return gpUnmapBufferOES != nil
+	case "glUseProgram":
+		return gpUseProgram != nil
+	case "glUseProgramStages":
+		return gpUseProgramStages != nil
+	case "glUseProgramStagesEXT":
+		return gpUseProgramStagesEXT != nil
+	case "glUseShaderProgramEXT":
+		return gpUseShaderProgramEXT != nil
+	case "glValidateProgram":
+		return gpValidateProgram != nil
+	case "glValidateProgramPipeline":
+		return gpValidateProgramPipeline != nil
+	case "glValidateProgramPipelineEXT":
+		return gpValidateProgramPipelineEXT != nil
+	case "glVertexAttrib1f":
+		return gpVertexAttrib1f != nil
+	case "glVertexAttrib1fv":
+		return gpVertexAttrib1fv != nil
+	case "glVertexAttrib2f":
+		return gpVertexAttrib2f != nil
+	case "glVertexAttrib2fv":
+		return gpVertexAttrib2fv != nil
+	case "glVertexAttrib3f":
+		return gpVertexAttrib3f != nil
+	case "glVertexAttrib3fv":
+		return gpVertexAttrib3fv != nil
+	case "glVertexAttrib4f":
+		return gpVertexAttrib4f != nil
+	case "glVertexAttrib4fv":
+		return gpVertexAttrib4fv != nil
+	case "glVertexAttribBinding":
+		return gpVertexAttribBinding != nil
+	case "glVertexAttribDivisor":
+		return gpVertexAttribDivisor != nil
+	case "glVertexAttribDivisorANGLE":
+		return gpVertexAttribDivisorANGLE != nil
+	case "glVertexAttribDivisorEXT":
+		return gpVertexAttribDivisorEXT != nil
+	case "glVertexAttribDivisorNV":
+		return gpVertexAttribDivisorNV != nil
+	case "glVertexAttribFormat":
+		return gpVertexAttribFormat != nil
+	case "glVertexAttribI4i":
+		return gpVertexAttribI4i != nil
+	case "glVertexAttribI4iv":
+		return gpVertexAttribI4iv != nil
+	case "glVertexAttribI4ui":
+		return gpVertexAttribI4ui != nil
+	case "glVertexAttribI4uiv":
+		return gpVertexAttribI4uiv != nil
+	case "glVertexAttribIFormat":
+		return gpVertexAttribIFormat != nil
+	case "glVertexAttribIPointer":
+		return gpVertexAttribIPointer != nil
+	case "glVertexAttribPointer":
+		return gpVertexAttribPointer != nil
+	case "glVertexBindingDivisor":
+		return gpVertexBindingDivisor != nil
+	case "glViewport":
+		return gpViewport != nil
+	case "glViewportArrayvNV":
+		return gpViewportArrayvNV != nil
+	case "glViewportArrayvOES":
+		return gpViewportArrayvOES != nil
+	case "glViewportIndexedfNV":
+		return gpViewportIndexedfNV != nil
+	case "glViewportIndexedfOES":
+		return gpViewportIndexedfOES != nil
+	case "glViewportIndexedfvNV":
+		return gpViewportIndexedfvNV != nil
+	case "glViewportIndexedfvOES":
+		return gpViewportIndexedfvOES != nil
+	case "glViewportPositionWScaleNV":
+		return gpViewportPositionWScaleNV != nil
+	case "glViewportSwizzleNV":
+		return gpViewportSwizzleNV != nil
+	case "glWaitSemaphoreEXT":
+		return gpWaitSemaphoreEXT != nil
+	case "glWaitSync":
+		return gpWaitSync != nil
+	case "glWaitSyncAPPLE":
+		return gpWaitSyncAPPLE != nil
+	case "glWaitVkSemaphoreNV":
+		return gpWaitVkSemaphoreNV != nil
+	case "glWeightPathsNV":
+		return gpWeightPathsNV != nil
+	case "glWindowRectanglesEXT":
+		return gpWindowRectanglesEXT != nil
+	default:
+		return false
+	}
 }

@@ -1,3 +1,3 @@
-module github.com/go-gl/gl
+module github.com/Uzer007-admin/gl
 
-go 1.12
+go 1.27.1

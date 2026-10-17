@@ -1,3 +1,23 @@
+# gl: библиотека проекта Granio
+
+**Исходный репозиторий:** [go-gl/gl](https://github.com/go-gl/gl).
+**Цель форка:** Обёртки OpenGL/GLES, загрузка функций и диагностика графического контекста. Изменения генерации согласованы с Glow.
+
+Репозиторий развивается самостоятельно. Исходная история, лицензия и авторство
+сохранены. Минимальная версия Go — **1.27.1**. Собственный адрес модуля:
+`github.com/Uzer007-admin/gl`
+.
+
+Платформенные ограничения и результаты проверок:
+[развитие графического стека](https://github.com/Uzer007-admin/granio/blob/dev/granio/docs/NATIVE_STACK_IMPLEMENTATION.md).
+Длительные проверки производительности в этот этап не входят.
+
+---
+
+## Документация исходного проекта и прежних этапов
+
+Адреса установки в сохранённых примерах ниже могут относиться к исходнику.
+
 # gl [![Build Status](https://github.com/go-gl/gl/actions/workflows/main.yml/badge.svg)](https://github.com/go-gl/gl/actions/workflows/main.yml) [![Go Reference](https://pkg.go.dev/badge/github.com/go-gl/gl.svg)](https://pkg.go.dev/github.com/go-gl/gl)
 
 This repository holds Go bindings to various OpenGL versions. They are auto-generated using [Glow](https://github.com/go-gl/glow).
@@ -6,6 +26,25 @@ Features:
 - Go functions that mirror the C specification using Go types.
 - Support for multiple OpenGL APIs (GL/GLES/EGL/WGL/GLX/EGL), versions, and profiles.
 - Support for extensions (including debug callbacks).
+- `IsFunctionAvailable("glFunctionName")` reports a loaded procedure address.
+  It does not establish API version, extension support, or OS compositor support.
+  Query it on the context thread after `Init`; initialization and rendering must
+  not race. Reinitialization resolves the entire table, clearing stale addresses
+  even when a required function is missing and initialization returns an error.
+- Each generated profile includes a deterministic `symbol_manifest.json` with
+  its API/version/profile, enum names and required/optional procedure names.
+
+The optional `v2.1/material` profile adds separate alpha blending, texture FBO
+and renderbuffer entry points (core/ARB and EXT names): 78 procedures. FBO entry
+points remain optional, preserving the GL 2.1 baseline. The existing 50-procedure
+Fyne profile is unchanged and is still the renderer's default.
+
+`capabilities` provides context/version/extension snapshots with no global
+procedure state; `capabilities/native.Query(glfw.GetProcAddress)` resolves only
+the three query functions on the current context thread. `Framebuffers` and
+`SeparateBlend` require both advertised support and loaded procedures. Browser
+adapters can use pure-Go `Queries.ExtensionNames`; this package is separate from
+the cgo native query adapter. OS backdrop support is outside these GL capabilities.
 
 Requirements:
 - A cgo compiler (typically gcc).
@@ -72,6 +111,62 @@ Not all such functions have an appropriate override! In case you stumble over su
 * Possibly even create a pull-request for `glow` with the missing override yourself, and re-generate the `gl` bindings.
 
 ## Generating
+
+### Compact Fyne profile
+
+`github.com/go-gl/gl/v2.1/fyne` (package `gl`) contains the symbols required by
+Fyne's native renderer plus renderer/version and shader diagnostics. The complete
+`v2.1/gl` package remains available. The compact profile currently loads 50
+functions, compared with 2,848 in the complete profile.
+
+In the enclosing Fyne workspace, run `python scripts/update-fyne-gl-profile.py`
+after changing the renderer's GL calls, then regenerate. The checked-in restriction
+is `profiles/fyne-gl21.json`; glow validates every requested symbol.
+
+Native `Init` uses generated NUL-terminated names directly without per-symbol
+C allocation. `InitWithProcAddrFunc` continues to pass ordinary Go names without
+NUL terminators. Windows loaders reject WGL failure sentinels before falling back
+to `opengl32.dll`. The context/thread requirements of `Init` still apply.
+
+The compact, material and strict GLES 2 profiles also expose `Load()` and
+`LoadWithProcAddrFunc()` returning immutable `*Functions` tables. They do not
+modify legacy globals. Methods and offset overloads use that table; a failed
+global reload or another window's table cannot replace its addresses. Load on
+the matching current context and discard/reload on recreation. Tables do not
+make GL calls thread-safe or take ownership of a context.
+
+### Material resources and GPU passes
+
+`github.com/go-gl/gl/material` is a portable resource/cache layer. `NewGLDevice`
+accepts the matching `capabilities.Context` and a material/GLES `Functions` table,
+selects supported core/ARB/EXT FBO entry points, creates complete RGBA8 texture
+targets and preserves texture, pixel-unpack-buffer and separate read/draw FBO
+bindings. `RenderTarget` restores FBO/viewport even on errors/panics and reuses
+query storage. It does not preserve other compositor-owned draw state.
+`CopySnapshot` copies a lower-layer region from the current read framebuffer to
+a target texture on the GPU, restores texture binding and rejects self-feedback.
+It uses bottom-left physical coordinates and does not rescale or capture DWM.
+
+`NewPool` defaults to 64 MiB of requested RGBA8 texel storage and two layers,
+each with two ping-pong targets. It checks old+new resize peak before allocation,
+rolls back partial creation and caches by source/style/surface generations,
+both scales and effect parameters. `Update` does no GL work on a cache hit.
+Driver bookkeeping, programs, window framebuffers and other caches are outside
+this texel budget. `Close` deletes while the matching context is current;
+`Abandon` forgets handles after context loss without deleting into a new context.
+
+`NewBlur` owns a shader/VBO and performs two GPU passes: five-tap separable
+Gaussian, rounded mask, tint and deterministic noise. The source must be a fresh
+snapshot of lower canvas layers in premultiplied RGBA; no desktop capture or
+per-frame CPU readback is performed. Optional linear-light filtering decodes
+before bilinear interpolation and encodes final sRGB output; the intermediate
+RGBA8 format has finite precision. Radius/corners are logical units and both
+axes are scaled independently. A compositor owns/rebinds its draw state after
+`Apply`; GL 2.1 compatibility/GLES 2 are the tested baselines. WebGL requires an
+adapter and runtime verification; desktop core profiles require appropriate
+vertex-array/rasterization state from their compositor.
+
+### All profiles
 
 These gl bindings are generated using the [Glow](https://github.com/go-gl/glow) generator. Only developers of this repository need to do this step.
 

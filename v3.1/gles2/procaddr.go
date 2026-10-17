@@ -43,13 +43,15 @@ package gles2
 	static HMODULE ogl32dll = NULL;
 	static void* GlowGetProcAddress(const char* name) {
 		void* pf = wglGetProcAddress((LPCSTR) name);
-		if (pf) {
+		// Some WGL implementations return these failure sentinels instead of NULL.
+		if (pf && pf != (void*) 1 && pf != (void*) 2 &&
+		    pf != (void*) 3 && pf != (void*) -1) {
 			return pf;
 		}
 		if (ogl32dll == NULL) {
 			ogl32dll = LoadLibraryA("opengl32.dll");
 		}
-		return GetProcAddress(ogl32dll, (LPCSTR) name);
+		return ogl32dll ? GetProcAddress(ogl32dll, (LPCSTR) name) : NULL;
 	}
 #elif defined(TAG_DARWIN)
 	#include <stdlib.h>
@@ -68,8 +70,7 @@ package gles2
 import "C"
 import "unsafe"
 
-func getProcAddress(namea string) unsafe.Pointer {
-	cname := C.CString(namea)
-	defer C.free(unsafe.Pointer(cname))
-	return C.GlowGetProcAddress(cname)
+// name must be a NUL-terminated generated literal. The resolver does not retain it.
+func getProcAddress(name string) unsafe.Pointer {
+	return C.GlowGetProcAddress((*C.char)(unsafe.Pointer(unsafe.StringData(name))))
 }
