@@ -143,6 +143,7 @@ package gl
 // typedef const GLubyte * (APIENTRYP GPGETSTRING)(GLenum  name);
 // typedef GLint  (APIENTRYP GPGETUNIFORMLOCATION)(GLuint  program, const GLchar * name);
 // typedef void  (APIENTRYP GPLINKPROGRAM)(GLuint  program);
+// typedef void  (APIENTRYP GPPIXELSTOREI)(GLenum  pname, GLint  param);
 // typedef void  (APIENTRYP GPREADBUFFER)(GLenum  src);
 // typedef void  (APIENTRYP GPREADPIXELS)(GLint  x, GLint  y, GLsizei  width, GLsizei  height, GLenum  format, GLenum  type, void * pixels);
 // typedef void  (APIENTRYP GPRENDERBUFFERSTORAGE)(GLenum  target, GLenum  internalformat, GLsizei  width, GLsizei  height);
@@ -341,6 +342,9 @@ package gl
 // static void  glowLinkProgram(GPLINKPROGRAM fnptr, GLuint  program) {
 //   (*fnptr)(program);
 // }
+// static void  glowPixelStorei(GPPIXELSTOREI fnptr, GLenum  pname, GLint  param) {
+//   (*fnptr)(pname, param);
+// }
 // static void  glowReadBuffer(GPREADBUFFER fnptr, GLenum  src) {
 //   (*fnptr)(src);
 // }
@@ -467,6 +471,13 @@ const (
 	ONE                       = 1
 	ONE_MINUS_CONSTANT_ALPHA  = 0x8004
 	ONE_MINUS_SRC_ALPHA       = 0x0303
+	PACK_ALIGNMENT            = 0x0D05
+	PACK_ROW_LENGTH           = 0x0D02
+	PACK_SKIP_PIXELS          = 0x0D04
+	PACK_SKIP_ROWS            = 0x0D03
+	PIXEL_PACK_BUFFER         = 0x88EB
+	PIXEL_PACK_BUFFER_BINDING = 0x88ED
+	READ_BUFFER               = 0x0C02
 	RED_BITS                  = 0x0D52
 	RENDERBUFFER              = 0x8D41
 	RENDERBUFFER_BINDING      = 0x8CA7
@@ -560,6 +571,7 @@ var (
 	gpGetString                              C.GPGETSTRING
 	gpGetUniformLocation                     C.GPGETUNIFORMLOCATION
 	gpLinkProgram                            C.GPLINKPROGRAM
+	gpPixelStorei                            C.GPPIXELSTOREI
 	gpReadBuffer                             C.GPREADBUFFER
 	gpReadPixels                             C.GPREADPIXELS
 	gpRenderbufferStorage                    C.GPRENDERBUFFERSTORAGE
@@ -862,6 +874,11 @@ func GetUniformLocation(program uint32, name *uint8) int32 {
 // Links a program object
 func LinkProgram(program uint32) {
 	C.glowLinkProgram(gpLinkProgram, (C.GLuint)(program))
+}
+
+// set pixel storage modes
+func PixelStorei(pname uint32, param int32) {
+	C.glowPixelStorei(gpPixelStorei, (C.GLenum)(pname), (C.GLint)(param))
 }
 
 // select a color buffer source for pixels
@@ -1519,6 +1536,16 @@ func initWithProcAddrFunc(getProcAddr func(name string) unsafe.Pointer, terminat
 		}
 	}
 	{
+		name := "glPixelStorei"
+		if terminated {
+			name = "glPixelStorei\x00"
+		}
+		gpPixelStorei = (C.GPPIXELSTOREI)(getProcAddr(name))
+		if gpPixelStorei == nil && firstMissing == "" {
+			firstMissing = "glPixelStorei"
+		}
+	}
+	{
 		name := "glReadBuffer"
 		if terminated {
 			name = "glReadBuffer\x00"
@@ -1825,6 +1852,8 @@ func IsFunctionAvailable(name string) bool {
 		return gpGetUniformLocation != nil
 	case "glLinkProgram":
 		return gpLinkProgram != nil
+	case "glPixelStorei":
+		return gpPixelStorei != nil
 	case "glReadBuffer":
 		return gpReadBuffer != nil
 	case "glReadPixels":
@@ -1933,6 +1962,7 @@ type Functions struct {
 	gpGetString                              C.GPGETSTRING
 	gpGetUniformLocation                     C.GPGETUNIFORMLOCATION
 	gpLinkProgram                            C.GPLINKPROGRAM
+	gpPixelStorei                            C.GPPIXELSTOREI
 	gpReadBuffer                             C.GPREADBUFFER
 	gpReadPixels                             C.GPREADPIXELS
 	gpRenderbufferStorage                    C.GPRENDERBUFFERSTORAGE
@@ -2528,6 +2558,16 @@ func loadFunctions(resolve func(string) unsafe.Pointer, terminated bool) (*Funct
 		}
 	}
 	{
+		name := "glPixelStorei"
+		if terminated {
+			name = "glPixelStorei\x00"
+		}
+		f.gpPixelStorei = (C.GPPIXELSTOREI)(resolve(name))
+		if f.gpPixelStorei == nil && firstMissing == "" {
+			firstMissing = "glPixelStorei"
+		}
+	}
+	{
 		name := "glReadBuffer"
 		if terminated {
 			name = "glReadBuffer\x00"
@@ -2831,6 +2871,8 @@ func (f *Functions) IsFunctionAvailable(name string) bool {
 		return f.gpGetUniformLocation != nil
 	case "glLinkProgram":
 		return f.gpLinkProgram != nil
+	case "glPixelStorei":
+		return f.gpPixelStorei != nil
 	case "glReadBuffer":
 		return f.gpReadBuffer != nil
 	case "glReadPixels":
@@ -3146,6 +3188,11 @@ func (glowContext *Functions) GetUniformLocation(program uint32, name *uint8) in
 // Links a program object
 func (glowContext *Functions) LinkProgram(program uint32) {
 	C.glowLinkProgram(glowContext.gpLinkProgram, (C.GLuint)(program))
+}
+
+// set pixel storage modes
+func (glowContext *Functions) PixelStorei(pname uint32, param int32) {
+	C.glowPixelStorei(glowContext.gpPixelStorei, (C.GLenum)(pname), (C.GLint)(param))
 }
 
 // select a color buffer source for pixels

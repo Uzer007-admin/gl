@@ -5,8 +5,14 @@
 
 Репозиторий развивается самостоятельно. Исходная история, лицензия и авторство
 сохранены. Минимальная версия Go — **1.27.1**. Собственный адрес модуля:
-`github.com/Uzer007-admin/gl`
-.
+`github.com/Uzer007-admin/gl`.
+
+Для безопасного чтения RGBA8 добавлен пакет [`readback`](readback/README.md).
+Он проверяет размеры и объём буфера, временно сбрасывает pixel-pack layout/PBO
+и восстанавливает состояние после чтения, ошибки или panic. Поддержка параметров
+проверяется по фактической версии GL/GLES и расширениям. Интеграция в Granio,
+причина пустого кадра 0×0 и результаты Windows/X11/Wayland описаны в
+[отчёте](https://github.com/Uzer007-admin/granio/blob/dev/granio/docs/GL_CAPTURE_REPAIR.md).
 
 Платформенные ограничения и результаты проверок:
 [развитие графического стека](https://github.com/Uzer007-admin/granio/blob/dev/granio/docs/NATIVE_STACK_IMPLEMENTATION.md).
@@ -35,8 +41,9 @@ Features:
   its API/version/profile, enum names and required/optional procedure names.
 
 The optional `v2.1/material` profile adds separate alpha blending, texture FBO
-and renderbuffer entry points (core/ARB and EXT names): 78 procedures. FBO entry
-points remain optional, preserving the GL 2.1 baseline. The existing 50-procedure
+and renderbuffer entry points (core/ARB and EXT names): 79 procedures, including
+pixel-store state for safe readback. FBO entry points remain optional, preserving
+the GL 2.1 baseline. The existing 51-procedure
 Fyne profile is unchanged and is still the renderer's default.
 
 `capabilities` provides context/version/extension snapshots with no global
@@ -116,7 +123,7 @@ Not all such functions have an appropriate override! In case you stumble over su
 
 `github.com/go-gl/gl/v2.1/fyne` (package `gl`) contains the symbols required by
 Fyne's native renderer plus renderer/version and shader diagnostics. The complete
-`v2.1/gl` package remains available. The compact profile currently loads 50
+`v2.1/gl` package remains available. The compact profile currently loads 51
 functions, compared with 2,848 in the complete profile.
 
 In the enclosing Fyne workspace, run `python scripts/update-fyne-gl-profile.py`

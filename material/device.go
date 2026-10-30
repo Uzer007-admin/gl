@@ -77,7 +77,7 @@ func NewGLDevice(context capabilities.Context, api Procedures) (*GLDevice, error
 	}
 	d := &GLDevice{api: api, maximum: context.MaxTextureSize,
 		split:     context.API == capabilities.OpenGL && (context.AtLeast(3, 0) || context.HasExtension("GL_ARB_framebuffer_object") || context.HasExtension("GL_EXT_framebuffer_blit")) || context.API == capabilities.OpenGLES && context.AtLeast(3, 0) || context.API == capabilities.WebGL && context.AtLeast(2, 0),
-		unpack:    context.API == capabilities.OpenGL && (context.AtLeast(2, 1) || context.HasExtension("GL_ARB_pixel_buffer_object")) || context.API == capabilities.OpenGLES && context.AtLeast(3, 0) || context.API == capabilities.WebGL && context.AtLeast(2, 0),
+		unpack:    context.API == capabilities.OpenGL && (context.AtLeast(2, 1) || context.HasExtension("GL_ARB_pixel_buffer_object") || context.HasExtension("GL_EXT_pixel_buffer_object")) || context.API == capabilities.OpenGLES && (context.AtLeast(3, 0) || context.HasExtension("GL_NV_pixel_buffer_object")) || context.API == capabilities.WebGL && context.AtLeast(2, 0),
 		sizedRGBA: context.API == capabilities.OpenGL || context.API == capabilities.OpenGLES && context.AtLeast(3, 0) || context.API == capabilities.WebGL && context.AtLeast(2, 0)}
 	switch context.Framebuffers(api.IsFunctionAvailable) {
 	case capabilities.CoreFramebuffer:
